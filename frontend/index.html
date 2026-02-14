@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ha-web dashboard</title>
+    <style>
+        body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 2rem; }
+        h1 { color: #0f3460; }
+        #status { margin-bottom: 1rem; }
+        .connected { color: #4ecca3; }
+        .disconnected { color: #e23e57; }
+        #messages { display: grid; gap: 0.5rem; }
+        .card {
+            background: #16213e;
+            padding: 1rem;
+            border-radius: 8px;
+            border-left: 3px solid #4ecca3;
+        }
+        .topic { color: #4ecca3; font-size: 0.85rem; }
+        .payload { font-size: 1.2rem; margin-top: 0.3rem; }
+        #cmd { margin-top: 2rem; }
+        input, button {
+            background: #16213e; color: #eee; border: 1px solid #0f3460;
+            padding: 0.5rem; border-radius: 4px; font-family: monospace;
+        }
+        button { cursor: pointer; background: #0f3460; }
+    </style>
+</head>
+<body>
+    <h1>ha-web dashboard</h1>
+    <div id="status" class="disconnected">desconectado</div>
+    <div id="messages"></div>
+
+    <div id="cmd">
+        <h3>Enviar comando MQTT</h3>
+        <input id="topic" placeholder="topic" />
+        <input id="payload" placeholder="payload" />
+        <button onclick="sendCmd()">Enviar</button>
+    </div>
+
+    <script>
+        const msgDiv = document.getElementById('messages');
+        const statusDiv = document.getElementById('status');
+        const cards = {};
+        let ws;
+
+        function connect() {
+            ws = new WebSocket(`ws://${location.host}/ws`);
+
+            ws.onopen = () => {
+                statusDiv.textContent = 'conectado';
+                statusDiv.className = 'connected';
+            };
+
+            ws.onclose = () => {
+                statusDiv.textContent = 'desconectado';
+                statusDiv.className = 'disconnected';
+                setTimeout(connect, 3000);
+            };
+
+            ws.onmessage = (e) => {
+                const { topic, payload } = JSON.parse(e.data);
+                if (!cards[topic]) {
+                    cards[topic] = document.createElement('div');
+                    cards[topic].className = 'card';
+                    msgDiv.appendChild(cards[topic]);
+                }
+                cards[topic].innerHTML = `
+                    <div class="topic">${topic}</div>
+                    <div class="payload">${payload}</div>
+                `;
+            };
+        }
+
+        function sendCmd() {
+            const topic = document.getElementById('topic').value;
+            const payload = document.getElementById('payload').value;
+            if (topic && ws?.readyState === 1) {
+                ws.send(JSON.stringify({ topic, payload }));
+            }
+        }
+
+        connect();
+    </script>
+</body>
+</html>
