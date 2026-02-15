@@ -3,11 +3,28 @@ services:
   mosquitto:
     image: eclipse-mosquitto:2
     volumes:
-      - ./mosquitto/config:/mosquitto/config:ro
+      - ./mosquitto/config:/mosquitto/config
       - mosquitto-data:/mosquitto/data
       - mosquitto-log:/mosquitto/log
     ports:
       - "127.0.0.1:1883:1883"
+      - "100.120.178.39:1883:1883"
+    restart: unless-stopped
+
+  influxdb:
+    image: influxdb:2
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+    env_file: .env
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUXDB_USER}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_PASSWORD}
+      - DOCKER_INFLUXDB_INIT_ORG=${INFLUXDB_ORG}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUXDB_BUCKET}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_TOKEN}
+    ports:
+      - "127.0.0.1:8086:8086"
     restart: unless-stopped
 
   backend:
@@ -15,6 +32,7 @@ services:
     env_file: .env
     depends_on:
       - mosquitto
+      - influxdb
     ports:
       - "127.0.0.1:8000:8000"
     restart: unless-stopped
@@ -33,3 +51,4 @@ services:
 volumes:
   mosquitto-data:
   mosquitto-log:
+  influxdb-data:
