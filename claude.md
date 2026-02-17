@@ -3,10 +3,11 @@
 ## Entorno de ejecución
 
 - **VPS**: Hetzner Cloud, Ubuntu Server
-- **Acceso**: SSH (claves), Tailscale disponible
+- **Acceso**: SSH (claves), Tailscale
 - **Firewall**: Configurado, sin puertos públicos innecesarios
 - **Desarrollo**: VS Code Remote-SSH desde Windows (claves copiadas desde WSL)
 - **Repo**: git@github.com:joserb/ha-web.git
+- **Ruta del proyecto**: `/opt/projects/ha-web`
 
 ## Filosofía del servidor
 
@@ -23,16 +24,61 @@
 - No comparten red ni volúmenes. Son stacks independientes
 - Futura integración con Moltbot vía API (no acoplamiento directo)
 
-## Stack ha-web
+## Stack ha-web (4 servicios Docker Compose)
 
-- **Mosquitto**: Broker MQTT para telemetría domótica
-- **FastAPI**: Backend Python asíncrono (MQTT + WebSocket + REST)
-- **Nginx**: Frontend estático + reverse proxy al backend
-- **Docker Compose**: Orquestación de los tres servicios
-- Todos los puertos ligados a 127.0.0.1 (sin exposición pública)
+- **Mosquitto**: Broker MQTT con autenticación (usuario: haweb, password_file)
+- **InfluxDB 2**: Base de datos de series temporales para histórico de sensores (bucket: sensors, org: haweb)
+- **FastAPI**: Backend Python asíncrono — se suscribe a MQTT, escribe en InfluxDB, reenvía datos por WebSocket, expone API REST
+- **Nginx**: Sirve frontend estático + reverse proxy a FastAPI (/api/ y /ws)
 
-## Convenciones
+## Puertos
 
-- Toda la configuración sensible va en `.env` (nunca en Git)
-- Los servicios solo se exponen internamente; acceso externo vía Tailscale o port forwarding
-- El frontend se comunica con el backend por WebSocket para datos en tiempo real
+- Mosquitto: 127.0.0.1:1883 + IP_TAILSCALE:1883 (accesible solo desde localhost y red Tailscale)
+- FastAPI: 127.0.0.1:8000
+- Nginx: 127.0.0.1:8080
+- InfluxDB: 127.0.0.1:8086
+- Nada expuesto a internet
+
+## Red Tailscale
+
+- VPS y RPi (Home Assistant) están en la misma red Tailscale
+- PC Windows de desarrollo también en Tailscale
+- MQTT accesible vía Tailscale para HA y herramientas como MQTT Studio
+
+## Home Assistant (RPi)
+
+- Instalación: HAOS (Home Assistant OS)
+- Tailscale instalado y conectado
+- Integración MQTT configurada apuntando al broker del VPS vía Tailscale
+- Automatizaciones activas publicando sensores: temp (salon, terraza, habitacion, estudio), door (entrada)
+- Topic `/test` reservado para pruebas de conexión (no se almacena ni se grafica)
+
+## Endpoints API
+
+- `GET /api/health` — Estado del backend y topics activos
+- `GET /api/history/{location}/{measurement}?hours=24` — Histórico de sensor desde InfluxDB (agregado en ventanas de 5min)
+- `WS /ws` — WebSocket bidireccional: recibe datos en tiempo real, envía comandos MQTT
+
+## Estructura de topics MQTT
+
+- Formato: `home/{ubicacion}/{medida}` (ej: `home/salon/temp`)
+- Payload JSON: `{"value": 22.5}` o valores simples
+- El backend parsea el topic para extraer tags location/measurement en InfluxDB
+
+## Frontend
+
+- Dashboard HTML/JS estático con WebSocket
+- Muestra tarjetas en tiempo real por topic MQTT
+- Incluye formulario para enviar comandos MQTT desde la web
+- Pendiente: gráficas de tendencias (Chart.js)
+
+## Configuración sensible
+
+- Todo en `.env` (nunca en Git)
+- Variables: MQTT_HOST, MQTT_PORT, MQTT_USER, MQTT_PASSWORD, INFLUXDB_URL, INFLUXDB_TOKEN, INFLUXDB_ORG, INFLUXDB_BUCKET, INFLUXDB_USER, INFLUXDB_PASSWORD
+
+## Próximos pasos
+
+1. Mejorar dashboard con gráficas de tendencias (Chart.js)
+2. Añadir actuadores (control de luces vía MQTT bidireccional)
+3. Integración con Moltbot (disparar acciones desde la web)
