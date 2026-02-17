@@ -33,11 +33,11 @@
 
 ## Puertos
 
-- Mosquitto: 127.0.0.1:1883 + IP_TAILSCALE:1883 (accesible solo desde localhost y red Tailscale)
+- Mosquitto: 127.0.0.1:1883 + IP_TAILSCALE:1883
 - FastAPI: 127.0.0.1:8000
-- Nginx: 127.0.0.1:8080
+- Nginx: 127.0.0.1:8080 + IP_TAILSCALE:8080
 - InfluxDB: 127.0.0.1:8086
-- Nada expuesto a internet
+- Nada expuesto a internet, solo localhost y Tailscale
 
 ## Red Tailscale
 
@@ -67,10 +67,15 @@
 
 ## Frontend
 
-- Dashboard HTML/JS estático con WebSocket
-- Muestra tarjetas en tiempo real por topic MQTT
-- Incluye formulario para enviar comandos MQTT desde la web
-- Pendiente: gráficas de tendencias (Chart.js)
+- Dashboard modular: HTML + CSS + JS (ES modules, sin framework ni build step)
+- Estructura: `frontend/index.html`, `frontend/css/styles.css`, `frontend/js/{app,sensors,ui}.js`
+- Gauge.js via CDN para indicadores de temperatura semicirculares
+- Sensor registry en `sensors.js`: añadir nuevo tipo de sensor = añadir entrada al registro
+- Tipos implementados: `temp` (gauge), `door` (binario abierta/cerrada)
+- WebSocket con reconexión automática, filtra topic `/test`
+- `sendCommand()` exportada en `app.js` para futuro panel de comandos
+- Dark theme responsive (CSS Grid)
+- Pendiente: gráficas de tendencias (Chart.js), panel de comandos/actuadores
 
 ## Configuración sensible
 
