@@ -56,34 +56,48 @@
 ## Endpoints API
 
 - `GET /api/health` — Estado del backend y topics activos
-- `GET /api/history/{location}/{measurement}?hours=24` — Histórico de sensor desde InfluxDB (agregado en ventanas de 5min)
+- `GET /api/history?location=...&measurement=...&hours=24` — Histórico numérico agregado en ventanas de 5min (media)
+- `GET /api/events?location=...&measurement=...&hours=24` — Eventos individuales sin agregar (estado string, ej: puerta open/closed)
 - `WS /ws` — WebSocket bidireccional: recibe datos en tiempo real, envía comandos MQTT
 
 ## Estructura de topics MQTT
 
 - Formato: `home/{ubicacion}/{medida}` (ej: `home/salon/temp`)
 - Payload JSON: `{"value": 22.5}` o valores simples
-- El backend parsea el topic para extraer tags location/measurement en InfluxDB
+- El backend parsea el topic para extraer tags `location` y `measurement` en InfluxDB
+- Payloads numéricos → field `value` (float)
+- Payloads string (ej: "open"/"closed") → field `state` (string)
+- Payloads JSON → cada clave numérica se escribe como field propio
 
 ## Frontend
 
 - Dashboard modular: HTML + CSS + JS (ES modules, sin framework ni build step)
 - Estructura: `frontend/index.html`, `frontend/css/styles.css`, `frontend/js/{app,sensors,ui}.js`
 - Gauge.js via CDN para indicadores de temperatura semicirculares
+- Chart.js via CDN para gráfica de tendencia (últimas 24h) dentro de cada card de temp
 - Sensor registry en `sensors.js`: añadir nuevo tipo de sensor = añadir entrada al registro
-- Tipos implementados: `temp` (gauge), `door` (binario abierta/cerrada)
-- WebSocket con reconexión automática, filtra topic `/test`
-- `sendCommand()` exportada en `app.js` para futuro panel de comandos
+- Tipos implementados: `temp` (gauge + sparkline Chart.js), `door` (binario + historial pares open/close)
+- Iconos SVG inline (termómetro, puerta abierta, puerta cerrada)
+- WebSocket con reconexión automática (3s), filtra topic `/test`
+- Al conectar, el backend envía últimos valores conocidos (replay de `last_messages`)
+- `sendCommand()` exportada en `app.js` para futuro panel de comandos/actuadores
+- Historial de puerta: carga `/api/events` al crear card, añade eventos en tiempo real, agrupa en pares open→close
 - Dark theme responsive (CSS Grid)
-- Pendiente: gráficas de tendencias (Chart.js), panel de comandos/actuadores
 
 ## Configuración sensible
 
 - Todo en `.env` (nunca en Git)
 - Variables: MQTT_HOST, MQTT_PORT, MQTT_USER, MQTT_PASSWORD, INFLUXDB_URL, INFLUXDB_TOKEN, INFLUXDB_ORG, INFLUXDB_BUCKET, INFLUXDB_USER, INFLUXDB_PASSWORD
 
+## Esquema InfluxDB
+
+- Measurement: `sensor`
+- Tags: `location` (ej: `home/salon`), `measurement` (ej: `temp`)
+- Fields: `value` (float, sensores numéricos), `state` (string, sensores de estado)
+- Query de `/api/history` tiene retrocompatibilidad: acepta tanto field `value` con tag `measurement`, como field con nombre igual al measurement (esquema antiguo)
+
 ## Próximos pasos
 
-1. Mejorar dashboard con gráficas de tendencias (Chart.js)
-2. Añadir actuadores (control de luces vía MQTT bidireccional)
-3. Integración con Moltbot (disparar acciones desde la web)
+1. Panel de actuadores (control de luces/enchufes vía MQTT bidireccional)
+2. Integración con Moltbot (disparar acciones desde la web)
+3. Añadir más tipos de sensor (humedad, CO2, etc.)

@@ -50,7 +50,7 @@ def write_to_influx(topic: str, payload: str):
                 parts = topic.rsplit("/", 1)
                 point = Point("sensor")
                 if len(parts) == 2:
-                    point = point.tag("location", parts[0]).field(parts[1], value)
+                    point = point.tag("location", parts[0]).tag("measurement", parts[1]).field("value", value)
                 else:
                     point = point.tag("topic", topic).field("value", value)
                 write_api.write(bucket=INFLUX_BUCKET, record=point)
@@ -126,8 +126,7 @@ async def history(location: str, measurement: str, hours: int = 24):
       |> range(start: -{hours}h)
       |> filter(fn: (r) => r._measurement == "sensor")
       |> filter(fn: (r) => r.location == "{location}")
-      |> filter(fn: (r) => r.measurement == "{measurement}")
-      |> filter(fn: (r) => r._field == "value")
+      |> filter(fn: (r) => r._field == "{measurement}" or (r._field == "value" and r.measurement == "{measurement}"))
       |> aggregateWindow(every: 5m, fn: mean, createEmpty: false)
       |> yield(name: "mean")
     '''
