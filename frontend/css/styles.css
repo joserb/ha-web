@@ -181,6 +181,85 @@ header h1 {
   letter-spacing: 1px;
 }
 
+/* --- Temperature Chart --- */
+
+.chart-wrapper {
+  width: 100%;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #ffffff10;
+}
+
+.chart-label {
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.35rem;
+}
+
+.chart-container {
+  position: relative;
+  height: 110px;
+  width: 100%;
+}
+
+/* --- Door History --- */
+
+.door-history {
+  width: 100%;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #ffffff10;
+}
+
+.history-title {
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.5rem;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.h-time {
+  font-variant-numeric: tabular-nums;
+}
+
+.h-open-now {
+  color: var(--accent-red);
+}
+
+.h-sep {
+  opacity: 0.4;
+}
+
+.h-dur {
+  margin-left: auto;
+  font-size: 0.7rem;
+  opacity: 0.55;
+}
+
+.h-empty {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  opacity: 0.5;
+  padding: 0.25rem 0;
+}
+
 /* --- Responsive --- */
 
 @media (max-width: 600px) {

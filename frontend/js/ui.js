@@ -2,6 +2,9 @@
 
 const cards = {};
 const gauges = {};
+const charts = {};
+const doorEvents = {};    // {topic: [{time, value}]} — eventos históricos + en vivo
+const lastDoorState = {}; // {topic: "open"|"closed"} — para evitar duplicados
 
 // --- SVG Icons ---
 
@@ -34,9 +37,128 @@ export function setConnectionStatus(connected) {
   }
 }
 
-// --- Card Creation ---
+// --- Helpers de tiempo ---
+
+function fmtTime(iso) {
+  return new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+}
+
+function fmtDuration(tOpen, tClose) {
+  const mins = Math.round((new Date(tClose) - new Date(tOpen)) / 60000);
+  return mins < 1 ? "<1min" : `${mins}min`;
+}
+
+// --- Historial de puerta ---
+
+function pairDoorEvents(events) {
+  const pairs = [];
+  let openEv = null;
+  for (const ev of events) {
+    if (ev.value === "open") {
+      if (openEv) pairs.push({ open: openEv, close: null }); // anterior sin cerrar
+      openEv = ev;
+    } else if (ev.value === "closed") {
+      pairs.push({ open: openEv, close: ev });
+      openEv = null;
+    }
+  }
+  if (openEv) pairs.push({ open: openEv, close: null });
+  return pairs.reverse(); // más reciente primero
+}
+
+function renderDoorHistory(topic, events) {
+  const safeId = topic.replace(/\//g, "-");
+  const listEl = document.getElementById(`door-history-${safeId}`);
+  if (!listEl) return;
+
+  const pairs = pairDoorEvents(events).slice(0, 8);
+  if (pairs.length === 0) {
+    listEl.innerHTML = `<div class="h-empty">sin eventos hoy</div>`;
+    return;
+  }
+
+  listEl.innerHTML = pairs.map(({ open, close }) => {
+    const openStr = open ? fmtTime(open.time) : "?";
+    const closeStr = close ? fmtTime(close.time) : "...";
+    const closeClass = close ? "" : "h-open-now";
+    const dur = open && close
+      ? `<span class="h-dur">${fmtDuration(open.time, close.time)}</span>`
+      : "";
+    return `<div class="history-item">
+      <span class="h-time">${openStr}</span>
+      <span class="h-sep">→</span>
+      <span class="h-time ${closeClass}">${closeStr}</span>
+      ${dur}
+    </div>`;
+  }).join("");
+}
+
+function appendDoorEvent(topic, value) {
+  if (lastDoorState[topic] === value) return; // sin cambio de estado
+  lastDoorState[topic] = value;
+  if (!doorEvents[topic]) doorEvents[topic] = [];
+  doorEvents[topic].push({ time: new Date().toISOString(), value });
+  renderDoorHistory(topic, doorEvents[topic]);
+}
+
+// --- Gráfica de temperatura ---
+
+function renderTempChart(topic, data) {
+  const safeId = topic.replace(/\//g, "-");
+  const canvas = document.getElementById(`chart-${safeId}`);
+  if (!canvas || !data.length) return;
+
+  charts[topic] = new Chart(canvas, {
+    type: "line",
+    data: {
+      labels: data.map(d => fmtTime(d.time)),
+      datasets: [{
+        data: data.map(d => d.value),
+        borderColor: "#4ecca3",
+        backgroundColor: "#4ecca318",
+        fill: true,
+        tension: 0.3,
+        pointRadius: 0,
+        borderWidth: 1.5,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: {
+          ticks: { color: "#8892b0", maxTicksLimit: 5, font: { size: 10 } },
+          grid: { color: "#ffffff08" },
+          border: { display: false },
+        },
+        y: {
+          ticks: { color: "#8892b0", maxTicksLimit: 4, font: { size: 10 } },
+          grid: { color: "#ffffff08" },
+          border: { display: false },
+        },
+      },
+    },
+  });
+}
+
+function appendToChart(topic, value) {
+  const chart = charts[topic];
+  if (!chart) return;
+  chart.data.labels.push(fmtTime(new Date().toISOString()));
+  chart.data.datasets[0].data.push(value);
+  if (chart.data.labels.length > 300) {
+    chart.data.labels.shift();
+    chart.data.datasets[0].data.shift();
+  }
+  chart.update("none");
+}
+
+// --- Creación de cards ---
 
 function createGaugeCard(topic, parsed) {
+  const safeId = topic.replace(/\//g, "-");
   const card = document.createElement("div");
   card.className = "sensor-card";
   card.innerHTML = `
@@ -49,32 +171,29 @@ function createGaugeCard(topic, parsed) {
     </div>
     <div class="card-body">
       <div class="gauge-container">
-        <canvas id="gauge-${topic.replace(/\//g, "-")}"></canvas>
+        <canvas id="gauge-${safeId}"></canvas>
       </div>
-      <div class="gauge-value" id="value-${topic.replace(/\//g, "-")}">--${parsed.sensorType.unit}</div>
+      <div class="gauge-value" id="value-${safeId}">--${parsed.sensorType.unit}</div>
+      <div class="chart-wrapper">
+        <div class="chart-label">últimas 24h</div>
+        <div class="chart-container">
+          <canvas id="chart-${safeId}"></canvas>
+        </div>
+      </div>
     </div>
   `;
 
   document.getElementById("dashboard").appendChild(card);
   cards[topic] = card;
 
-  // Init Gauge.js
-  const canvas = card.querySelector("canvas");
+  // Gauge.js
   const opts = parsed.sensorType.gaugeOpts;
-  const gauge = new Gauge(canvas).setOptions({
+  const gauge = new Gauge(card.querySelector(`#gauge-${safeId}`)).setOptions({
     angle: -0.25,
     lineWidth: 0.15,
     radiusScale: 0.9,
-    pointer: {
-      length: 0.55,
-      strokeWidth: 0.035,
-      color: "#eee",
-    },
-    staticZones: opts.zones.map(z => ({
-      strokeStyle: z.color,
-      min: z.min,
-      max: z.max,
-    })),
+    pointer: { length: 0.55, strokeWidth: 0.035, color: "#eee" },
+    staticZones: opts.zones.map(z => ({ strokeStyle: z.color, min: z.min, max: z.max })),
     staticLabels: {
       font: "11px monospace",
       labels: [opts.min, 10, 20, 30, 40, opts.max],
@@ -84,22 +203,24 @@ function createGaugeCard(topic, parsed) {
     limitMax: true,
     limitMin: true,
     highDpiSupport: true,
-    renderTicks: {
-      divisions: 5,
-      divWidth: 1,
-      divLength: 0.5,
-      divColor: "#8892b044",
-    },
+    renderTicks: { divisions: 5, divWidth: 1, divLength: 0.5, divColor: "#8892b044" },
   });
-
   gauge.maxValue = opts.max;
   gauge.setMinValue(opts.min);
   gauge.animationSpeed = 20;
   gauge.set(opts.min);
   gauges[topic] = gauge;
+
+  // Cargar histórico
+  const params = new URLSearchParams({ location: parsed.location, measurement: parsed.measurement });
+  fetch(`/api/history?${params}`)
+    .then(r => r.json())
+    .then(data => renderTempChart(topic, data))
+    .catch(() => {});
 }
 
 function createBinaryCard(topic, parsed) {
+  const safeId = topic.replace(/\//g, "-");
   const card = document.createElement("div");
   card.className = "sensor-card";
   card.innerHTML = `
@@ -111,18 +232,37 @@ function createBinaryCard(topic, parsed) {
       </div>
     </div>
     <div class="card-body">
-      <div class="binary-status" id="binary-${topic.replace(/\//g, "-")}">
+      <div class="binary-status" id="binary-${safeId}">
         <div class="binary-icon">${ICONS.doorClosed}</div>
         <div class="binary-label">--</div>
+      </div>
+      <div class="door-history">
+        <div class="history-title">historial (24h)</div>
+        <div class="history-list" id="door-history-${safeId}">
+          <div class="h-empty">cargando...</div>
+        </div>
       </div>
     </div>
   `;
 
   document.getElementById("dashboard").appendChild(card);
   cards[topic] = card;
+
+  // Cargar eventos
+  const params = new URLSearchParams({ location: parsed.location, measurement: parsed.measurement });
+  fetch(`/api/events?${params}`)
+    .then(r => r.json())
+    .then(evs => {
+      doorEvents[topic] = evs;
+      renderDoorHistory(topic, evs);
+    })
+    .catch(() => {
+      const listEl = document.getElementById(`door-history-${safeId}`);
+      if (listEl) listEl.innerHTML = `<div class="h-empty">sin datos</div>`;
+    });
 }
 
-// --- Card Updates ---
+// --- Actualización de cards ---
 
 function updateGaugeCard(topic, parsed, value) {
   const safeId = topic.replace(/\//g, "-");
@@ -145,7 +285,6 @@ function updateBinaryCard(topic, parsed, state) {
   container.querySelector(".binary-label").textContent = stateConfig.label;
   container.style.color = stateConfig.color;
 
-  // Update header icon too
   const card = cards[topic];
   if (card) {
     card.querySelector(".card-icon").innerHTML = icon;
@@ -153,25 +292,29 @@ function updateBinaryCard(topic, parsed, state) {
   }
 }
 
-// --- Public API ---
+// --- API pública ---
 
 export function createOrUpdateCard(topic, parsed, payload) {
   const sensorType = parsed.sensorType;
   if (!sensorType) return;
 
   const value = sensorType.parseValue(payload);
+  const isNew = !cards[topic];
 
-  if (!cards[topic]) {
-    if (sensorType.renderer === "gauge") {
-      createGaugeCard(topic, parsed);
-    } else if (sensorType.renderer === "binary") {
-      createBinaryCard(topic, parsed);
-    }
+  if (isNew) {
+    if (sensorType.renderer === "gauge") createGaugeCard(topic, parsed);
+    else if (sensorType.renderer === "binary") createBinaryCard(topic, parsed);
   }
 
   if (sensorType.renderer === "gauge") {
     updateGaugeCard(topic, parsed, value);
+    if (!isNew) appendToChart(topic, value);
   } else if (sensorType.renderer === "binary") {
     updateBinaryCard(topic, parsed, value);
+    if (isNew) {
+      lastDoorState[topic] = value; // estado inicial, no contar como evento
+    } else {
+      appendDoorEvent(topic, value); // evento en tiempo real
+    }
   }
 }

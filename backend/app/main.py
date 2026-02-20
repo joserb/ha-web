@@ -63,7 +63,14 @@ def write_to_influx(topic: str, payload: str):
             point = Point("sensor").tag("topic", topic).field("value", value)
             write_api.write(bucket=INFLUX_BUCKET, record=point)
         except ValueError:
-            pass
+            # Guardar como estado string (ej: puerta "open"/"closed")
+            parts = topic.rsplit("/", 1)
+            point = Point("sensor")
+            if len(parts) == 2:
+                point = point.tag("location", parts[0]).tag("measurement", parts[1]).field("state", payload.strip())
+            else:
+                point = point.tag("topic", topic).field("state", payload.strip())
+            write_api.write(bucket=INFLUX_BUCKET, record=point)
 
 
 async def mqtt_listener():
@@ -111,15 +118,16 @@ async def health():
     return {"status": "ok", "topics": list(last_messages.keys())}
 
 
-@app.get("/api/history/{location}/{measurement}")
+@app.get("/api/history")
 async def history(location: str, measurement: str, hours: int = 24):
-    """Devuelve histórico de un sensor. Ej: /api/history/home%2Fsalon/temp?hours=24"""
+    """Devuelve histórico de un sensor. Ej: /api/history?location=home/salon&measurement=temp"""
     query = f'''
     from(bucket: "{INFLUX_BUCKET}")
       |> range(start: -{hours}h)
       |> filter(fn: (r) => r._measurement == "sensor")
       |> filter(fn: (r) => r.location == "{location}")
       |> filter(fn: (r) => r.measurement == "{measurement}")
+      |> filter(fn: (r) => r._field == "value")
       |> aggregateWindow(every: 5m, fn: mean, createEmpty: false)
       |> yield(name: "mean")
     '''
@@ -130,6 +138,29 @@ async def history(location: str, measurement: str, hours: int = 24):
             results.append({
                 "time": record.get_time().isoformat(),
                 "field": record.get_field(),
+                "value": record.get_value()
+            })
+    return results
+
+
+@app.get("/api/events")
+async def events(location: str, measurement: str, hours: int = 24):
+    """Devuelve eventos individuales (sin agregar) de un sensor. Ej: /api/events?location=home/entrada&measurement=door"""
+    query = f'''
+    from(bucket: "{INFLUX_BUCKET}")
+      |> range(start: -{hours}h)
+      |> filter(fn: (r) => r._measurement == "sensor")
+      |> filter(fn: (r) => r.location == "{location}")
+      |> filter(fn: (r) => r.measurement == "{measurement}")
+      |> filter(fn: (r) => r._field == "state")
+      |> sort(columns: ["_time"])
+    '''
+    tables = query_api.query(query)
+    results = []
+    for table in tables:
+        for record in table.records:
+            results.append({
+                "time": record.get_time().isoformat(),
                 "value": record.get_value()
             })
     return results
