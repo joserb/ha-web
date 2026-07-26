@@ -184,6 +184,60 @@ header h1 {
   letter-spacing: -1px;
 }
 
+/* --- Meter --- */
+
+.meter-value {
+  margin: 0.25rem 0 1rem;
+  color: var(--text-primary);
+  font-size: 2.35rem;
+  font-weight: 700;
+  letter-spacing: -2px;
+}
+
+.meter-track {
+  width: 100%;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #ffffff12;
+}
+
+.meter-fill {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.4s ease, background 0.2s;
+}
+
+.meter-fill.is-warning {
+  background: var(--accent-red);
+}
+
+.meter-scale {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 0.35rem;
+  color: var(--text-secondary);
+  font-size: 0.65rem;
+}
+
+.reading-meta {
+  align-self: flex-start;
+  margin-top: 0.7rem;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+}
+
+.sensor-card.is-stale {
+  border-left-color: #f39c12;
+}
+
+.sensor-card.is-stale .reading-meta {
+  color: #f39c12;
+}
+
 /* --- Binary Sensor (door) --- */
 
 .binary-status {

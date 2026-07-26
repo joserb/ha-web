@@ -5,6 +5,7 @@ import { getSelectedRange, getSelectedRangeLabel } from "./time-range.js";
 const cards = {};
 const gauges = {};
 const charts = {};
+const lastReadingTimes = {};
 const doorEvents = {};    // {topic: [{time, value}]} — eventos históricos + en vivo
 const lastDoorState = {}; // {topic: "open"|"closed"} — para evitar duplicados
 
@@ -13,6 +14,10 @@ const lastDoorState = {}; // {topic: "open"|"closed"} — para evitar duplicados
 const ICONS = {
   thermometer: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="icon">
     <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
+  </svg>`,
+
+  humidity: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="icon">
+    <path d="M12 2.5S5.5 10 5.5 15a6.5 6.5 0 0 0 13 0C18.5 10 12 2.5 12 2.5z"/>
   </svg>`,
 
   doorClosed: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="icon">
@@ -48,6 +53,28 @@ function fmtTime(iso) {
 function fmtDuration(tOpen, tClose) {
   const mins = Math.round((new Date(tClose) - new Date(tOpen)) / 60000);
   return mins < 1 ? "<1min" : `${mins}min`;
+}
+
+function fmtAge(seconds) {
+  if (seconds == null) return "sin fecha";
+  if (seconds < 60) return "ahora";
+  if (seconds < 3600) return `hace ${Math.floor(seconds / 60)} min`;
+  if (seconds < 86400) return `hace ${Math.floor(seconds / 3600)} h`;
+  return `hace ${Math.floor(seconds / 86400)} d`;
+}
+
+function updateFreshness(topic, current) {
+  if (!current) return;
+  const safeId = topic.replace(/\//g, "-");
+  const card = cards[topic];
+  const meta = document.getElementById(`reading-meta-${safeId}`);
+  const seconds = current.age_seconds ?? Math.max(
+    0,
+    Math.floor((Date.now() - new Date(current.updated_at).getTime()) / 1000),
+  );
+  const stale = current.stale ?? false;
+  if (meta) meta.textContent = stale ? `Dato antiguo · ${fmtAge(seconds)}` : fmtAge(seconds);
+  card?.classList.toggle("is-stale", stale);
 }
 
 // --- Historial de puerta ---
@@ -225,6 +252,55 @@ function createGaugeCard(topic, parsed) {
     .catch(() => {});
 }
 
+function createMeterCard(topic, parsed) {
+  const safeId = topic.replace(/\//g, "-");
+  const sensorType = parsed.sensorType;
+  const icon = sensorType.kind === "humidity" ? ICONS.humidity : ICONS.thermometer;
+  const card = document.createElement("div");
+  card.className = "sensor-card meter-card";
+  card.innerHTML = `
+    <div class="card-header">
+      <span class="card-icon">${icon}</span>
+      <div>
+        <div class="card-title">${parsed.locationLabel}</div>
+        <div class="card-subtitle">${sensorType.label}</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="meter-value" id="value-${safeId}">--${sensorType.unit || ""}</div>
+      <div class="meter-track" role="meter"
+           aria-valuemin="${sensorType.minimum}" aria-valuemax="${sensorType.maximum}"
+           aria-label="${sensorType.label} en ${parsed.locationLabel}">
+        <div class="meter-fill" id="meter-${safeId}"></div>
+      </div>
+      <div class="meter-scale">
+        <span>${sensorType.minimum}${sensorType.unit || ""}</span>
+        <span>${sensorType.maximum}${sensorType.unit || ""}</span>
+      </div>
+      <div class="reading-meta" id="reading-meta-${safeId}">sin fecha</div>
+      <div class="chart-wrapper">
+        <div class="chart-label">últimos ${getSelectedRangeLabel()}</div>
+        <div class="chart-container">
+          <canvas id="chart-${safeId}"></canvas>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("dashboard").appendChild(card);
+  cards[topic] = card;
+
+  const params = new URLSearchParams({
+    location: parsed.location,
+    measurement: parsed.measurement,
+    range: getSelectedRange(),
+  });
+  fetch(`/api/history?${params}`)
+    .then(r => r.json())
+    .then(data => renderTempChart(topic, data))
+    .catch(() => {});
+}
+
 function createBinaryCard(topic, parsed) {
   const safeId = topic.replace(/\//g, "-");
   const card = document.createElement("div");
@@ -283,6 +359,30 @@ function updateGaugeCard(topic, parsed, value) {
   }
 }
 
+function updateMeterCard(topic, parsed, value) {
+  if (Number.isNaN(value)) return;
+  const safeId = topic.replace(/\//g, "-");
+  const sensorType = parsed.sensorType;
+  const valueEl = document.getElementById(`value-${safeId}`);
+  const meter = document.getElementById(`meter-${safeId}`);
+  const track = meter?.parentElement;
+  const span = sensorType.maximum - sensorType.minimum;
+  const percentage = span > 0
+    ? Math.max(0, Math.min(100, ((value - sensorType.minimum) / span) * 100))
+    : 0;
+
+  if (valueEl) valueEl.textContent = `${value.toFixed(1)}${sensorType.unit || ""}`;
+  if (meter) {
+    meter.style.width = `${percentage}%`;
+    meter.classList.toggle(
+      "is-warning",
+      sensorType.warning_above != null && value >= sensorType.warning_above,
+    );
+  }
+  track?.setAttribute("aria-valuenow", value.toString());
+  track?.setAttribute("aria-valuetext", `${value.toFixed(1)} ${sensorType.unit || ""}`);
+}
+
 function updateBinaryCard(topic, parsed, state) {
   const safeId = topic.replace(/\//g, "-");
   const container = document.getElementById(`binary-${safeId}`);
@@ -304,7 +404,7 @@ function updateBinaryCard(topic, parsed, state) {
 
 // --- API pública ---
 
-export function createOrUpdateCard(topic, parsed, payload) {
+export function createOrUpdateCard(topic, parsed, payload, current = null) {
   const sensorType = parsed.sensorType;
   if (!sensorType) return;
 
@@ -313,13 +413,19 @@ export function createOrUpdateCard(topic, parsed, payload) {
 
   if (isNew) {
     if (sensorType.renderer === "gauge") createGaugeCard(topic, parsed);
-    else if (sensorType.renderer === "binary") createBinaryCard(topic, parsed);
+    else if (sensorType.renderer === "meter") createMeterCard(topic, parsed);
+    else if (sensorType.renderer === "timeline") createBinaryCard(topic, parsed);
   }
 
   if (sensorType.renderer === "gauge") {
     updateGaugeCard(topic, parsed, value);
     if (!isNew) appendToChart(topic, value);
-  } else if (sensorType.renderer === "binary") {
+  } else if (sensorType.renderer === "meter") {
+    updateMeterCard(topic, parsed, value);
+    const readingTime = current?.updated_at;
+    if (!isNew && readingTime !== lastReadingTimes[topic]) appendToChart(topic, value);
+    if (readingTime) lastReadingTimes[topic] = readingTime;
+  } else if (sensorType.renderer === "timeline") {
     updateBinaryCard(topic, parsed, value);
     if (isNew) {
       lastDoorState[topic] = value; // estado inicial, no contar como evento
@@ -327,4 +433,5 @@ export function createOrUpdateCard(topic, parsed, payload) {
       appendDoorEvent(topic, value); // evento en tiempo real
     }
   }
+  updateFreshness(topic, current);
 }

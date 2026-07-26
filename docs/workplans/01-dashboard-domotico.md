@@ -215,3 +215,4 @@ El dashboard tendrá un selector global con estos valores exactos:
 - 2026-07-26: backup online creado y primera entrega desplegada; los diez rangos, la compatibilidad con `hours` y el rechazo de rangos inválidos quedan verificados en el VPS.
 - 2026-07-26: iniciado el catálogo versionado de sensores y la recuperación de valores actuales desde InfluxDB.
 - 2026-07-26: recuperación verificada después de reiniciar el backend; seis canales reales reaparecen desde InfluxDB y exponen antigüedad y estado obsoleto.
+- 2026-07-26: iniciado el consumo del catálogo en frontend y la card numérica `meter`.

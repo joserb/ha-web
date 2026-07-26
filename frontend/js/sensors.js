@@ -1,68 +1,62 @@
-// sensors.js — Registro de tipos de sensor, parser de topics, filtros
+// sensors.js — Catálogo de sensores, parser de topics y filtros
 
-export const SENSOR_TYPES = {
-  temp: {
-    label: "Temperatura",
-    unit: "°C",
-    renderer: "gauge",
-    gaugeOpts: {
-      min: -5,
-      max: 50,
-      zones: [
-        { min: -5, max: 10, color: "#3498db" },
-        { min: 10, max: 18, color: "#2ecc71" },
-        { min: 18, max: 24, color: "#4ecca3" },
-        { min: 24, max: 30, color: "#f39c12" },
-        { min: 30, max: 50, color: "#e23e57" },
-      ],
-    },
-    parseValue(payload) {
-      try {
-        const obj = JSON.parse(payload);
-        return typeof obj === "object" ? parseFloat(obj.value) : parseFloat(obj);
-      } catch {
-        return parseFloat(payload);
-      }
-    },
-  },
-
-  door: {
-    label: "Puerta",
-    unit: "",
-    renderer: "binary",
-    states: {
-      open:   { label: "Abierta",  color: "#e23e57" },
-      closed: { label: "Cerrada",  color: "#4ecca3" },
-    },
-    parseValue(payload) {
-      const val = payload.toLowerCase().trim();
-      return (val === "on" || val === "open" || val === "1") ? "open" : "closed";
-    },
-  },
-};
-
-export const LOCATION_LABELS = {
-  "home/salon":      "Salón",
-  "home/terraza":    "Terraza",
-  "home/habitacion": "Habitación",
-  "home/estudio":    "Estudio",
-  "home/entrada":    "Entrada",
-};
-
+const catalogByTopic = new Map();
 const IGNORED_TOPICS = ["/test", "test"];
+
+function parseNumeric(payload) {
+  try {
+    const value = JSON.parse(payload);
+    return typeof value === "object" ? parseFloat(value.value) : parseFloat(value);
+  } catch {
+    return parseFloat(payload);
+  }
+}
+
+function buildSensorType(sensor) {
+  if (sensor.kind === "door") {
+    return {
+      ...sensor,
+      renderer: "timeline",
+      states: {
+        open: { label: "Abierta", color: "#e23e57" },
+        closed: { label: "Cerrada", color: "#4ecca3" },
+      },
+      parseValue(payload) {
+        const value = payload.toLowerCase().trim();
+        return ["on", "open", "1"].includes(value) ? "open" : "closed";
+      },
+    };
+  }
+
+  return {
+    ...sensor,
+    renderer: sensor.card,
+    parseValue: parseNumeric,
+  };
+}
+
+export async function loadSensorCatalog() {
+  const response = await fetch("/api/sensors");
+  if (!response.ok) throw new Error(`No se pudo cargar el catálogo (${response.status})`);
+
+  const sensors = await response.json();
+  catalogByTopic.clear();
+  for (const sensor of sensors) catalogByTopic.set(sensor.topic, sensor);
+  return sensors;
+}
 
 export function shouldIgnore(topic) {
   return IGNORED_TOPICS.some(t => topic === t || topic.endsWith("/" + t));
 }
 
 export function parseTopic(topic) {
-  const lastSlash = topic.lastIndexOf("/");
-  const location = topic.substring(0, lastSlash);
-  const measurement = topic.substring(lastSlash + 1);
+  const sensor = catalogByTopic.get(topic);
+  if (!sensor) return { sensorType: null };
+
   return {
-    location,
-    measurement,
-    locationLabel: LOCATION_LABELS[location] || location,
-    sensorType: SENSOR_TYPES[measurement] || null,
+    location: sensor.location,
+    measurement: sensor.measurement,
+    locationLabel: sensor.location_label,
+    sensorType: buildSensorType(sensor),
   };
 }

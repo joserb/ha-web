@@ -127,7 +127,12 @@ async def mqtt_listener():
                     await asyncio.to_thread(write_to_influx, topic, payload)
 
                     # Reenviar a WebSocket
-                    data = json.dumps({"topic": topic, "payload": payload})
+                    data = json.dumps({
+                        "topic": topic,
+                        "payload": payload,
+                        "updated_at": current_states[topic].updated_at.isoformat(),
+                        "source": "mqtt",
+                    })
                     for ws in connected_clients.copy():
                         try:
                             await ws.send_text(data)
@@ -259,7 +264,12 @@ async def websocket_endpoint(ws: WebSocket):
     connected_clients.append(ws)
 
     for topic, state in current_states.items():
-        await ws.send_text(json.dumps({"topic": topic, "payload": state.payload}))
+        await ws.send_text(json.dumps({
+            "topic": topic,
+            "payload": state.payload,
+            "updated_at": state.updated_at.isoformat(),
+            "source": state.source,
+        }))
 
     try:
         while True:
