@@ -1,5 +1,5 @@
 ---
-status: designed
+status: in-progress
 created: 2026-07-26
 updated: 2026-07-26
 ---
@@ -211,3 +211,4 @@ El dashboard tendrá un selector global con estos valores exactos:
 ## Registro de progreso
 
 - 2026-07-26: plan inicial creado a partir de la auditoría del despliegue activo.
+- 2026-07-26: ejecución iniciada con el contrato de rangos temporales y el selector global del dashboard.

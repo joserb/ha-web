@@ -2,6 +2,7 @@
 
 import { shouldIgnore, parseTopic } from "./sensors.js";
 import { createOrUpdateCard, setConnectionStatus } from "./ui.js";
+import { initTimeRangeControl } from "./time-range.js";
 
 let ws;
 
@@ -32,4 +33,5 @@ export function sendCommand(topic, payload) {
   }
 }
 
+initTimeRangeControl();
 connect();

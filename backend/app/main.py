@@ -4,9 +4,11 @@ import os
 from contextlib import asynccontextmanager
 
 import aiomqtt
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
+
+from app.time_ranges import TimeRange, get_legacy_hours_spec, get_time_range_spec
 
 # Config InfluxDB
 INFLUX_URL = os.getenv("INFLUXDB_URL", "http://influxdb:8086")
@@ -119,15 +121,25 @@ async def health():
 
 
 @app.get("/api/history")
-async def history(location: str, measurement: str, hours: int = 24):
+async def history(
+    location: str = Query(pattern=r"^[a-zA-Z0-9_/-]+$", max_length=128),
+    measurement: str = Query(pattern=r"^[a-zA-Z0-9_-]+$", max_length=64),
+    period: TimeRange | None = Query(default=None, alias="range"),
+    hours: int | None = Query(default=None, ge=1, le=8760),
+):
     """Devuelve histórico de un sensor. Ej: /api/history?location=home/salon&measurement=temp"""
+    spec = (
+        get_legacy_hours_spec(hours)
+        if hours is not None and period is None
+        else get_time_range_spec(period or TimeRange.DAY_1)
+    )
     query = f'''
     from(bucket: "{INFLUX_BUCKET}")
-      |> range(start: -{hours}h)
+      |> range(start: {spec.start})
       |> filter(fn: (r) => r._measurement == "sensor")
       |> filter(fn: (r) => r.location == "{location}")
       |> filter(fn: (r) => r._field == "{measurement}" or (r._field == "value" and r.measurement == "{measurement}"))
-      |> aggregateWindow(every: 5m, fn: mean, createEmpty: false)
+      |> aggregateWindow(every: {spec.window}, fn: mean, createEmpty: false)
       |> yield(name: "mean")
     '''
     tables = query_api.query(query)
@@ -143,11 +155,21 @@ async def history(location: str, measurement: str, hours: int = 24):
 
 
 @app.get("/api/events")
-async def events(location: str, measurement: str, hours: int = 24):
+async def events(
+    location: str = Query(pattern=r"^[a-zA-Z0-9_/-]+$", max_length=128),
+    measurement: str = Query(pattern=r"^[a-zA-Z0-9_-]+$", max_length=64),
+    period: TimeRange | None = Query(default=None, alias="range"),
+    hours: int | None = Query(default=None, ge=1, le=8760),
+):
     """Devuelve eventos individuales (sin agregar) de un sensor. Ej: /api/events?location=home/entrada&measurement=door"""
+    spec = (
+        get_legacy_hours_spec(hours)
+        if hours is not None and period is None
+        else get_time_range_spec(period or TimeRange.DAY_1)
+    )
     query = f'''
     from(bucket: "{INFLUX_BUCKET}")
-      |> range(start: -{hours}h)
+      |> range(start: {spec.start})
       |> filter(fn: (r) => r._measurement == "sensor")
       |> filter(fn: (r) => r.location == "{location}")
       |> filter(fn: (r) => r.measurement == "{measurement}")

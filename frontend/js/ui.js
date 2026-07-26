@@ -1,5 +1,7 @@
 // ui.js — Creación y actualización de cards y componentes DOM
 
+import { getSelectedRange, getSelectedRangeLabel } from "./time-range.js";
+
 const cards = {};
 const gauges = {};
 const charts = {};
@@ -175,7 +177,7 @@ function createGaugeCard(topic, parsed) {
       </div>
       <div class="gauge-value" id="value-${safeId}">--${parsed.sensorType.unit}</div>
       <div class="chart-wrapper">
-        <div class="chart-label">últimas 24h</div>
+        <div class="chart-label">últimos ${getSelectedRangeLabel()}</div>
         <div class="chart-container">
           <canvas id="chart-${safeId}"></canvas>
         </div>
@@ -212,7 +214,11 @@ function createGaugeCard(topic, parsed) {
   gauges[topic] = gauge;
 
   // Cargar histórico
-  const params = new URLSearchParams({ location: parsed.location, measurement: parsed.measurement });
+  const params = new URLSearchParams({
+    location: parsed.location,
+    measurement: parsed.measurement,
+    range: getSelectedRange(),
+  });
   fetch(`/api/history?${params}`)
     .then(r => r.json())
     .then(data => renderTempChart(topic, data))
@@ -237,7 +243,7 @@ function createBinaryCard(topic, parsed) {
         <div class="binary-label">--</div>
       </div>
       <div class="door-history">
-        <div class="history-title">historial (24h)</div>
+        <div class="history-title">historial (${getSelectedRangeLabel()})</div>
         <div class="history-list" id="door-history-${safeId}">
           <div class="h-empty">cargando...</div>
         </div>
@@ -249,7 +255,11 @@ function createBinaryCard(topic, parsed) {
   cards[topic] = card;
 
   // Cargar eventos
-  const params = new URLSearchParams({ location: parsed.location, measurement: parsed.measurement });
+  const params = new URLSearchParams({
+    location: parsed.location,
+    measurement: parsed.measurement,
+    range: getSelectedRange(),
+  });
   fetch(`/api/events?${params}`)
     .then(r => r.json())
     .then(evs => {

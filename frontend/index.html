@@ -11,9 +11,15 @@
 <body>
     <header>
         <h1>ha-web</h1>
-        <div class="status">
-            <div id="status-dot" class="status-dot disconnected"></div>
-            <span id="status-text">desconectado</span>
+        <div class="header-controls">
+            <label class="time-range-control" for="time-range">
+                <span>Periodo</span>
+                <select id="time-range" aria-label="Rango temporal global"></select>
+            </label>
+            <div class="status">
+                <div id="status-dot" class="status-dot disconnected"></div>
+                <span id="status-text">desconectado</span>
+            </div>
         </div>
     </header>
 
