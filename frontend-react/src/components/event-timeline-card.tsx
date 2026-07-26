@@ -7,10 +7,11 @@ interface Timeline { range_start: string; range_end: string; intervals: Array<{ 
 
 export function EventTimelineCard({ sensor, range }: { sensor: Sensor; range: TimeRange }) {
   const [timeline, setTimeline] = useState<Timeline | null>(null);
+  const latestReading = sensor.current?.updated_at;
   useEffect(() => {
     const query = new URLSearchParams({ sensor_id: sensor.id, range });
     fetch(`/api/intervals?${query}`).then((response) => response.json()).then(setTimeline).catch(() => setTimeline(null));
-  }, [sensor.id, range]);
+  }, [sensor.id, range, latestReading]);
   const start = timeline ? new Date(timeline.range_start).getTime() : 0;
   const end = timeline ? new Date(timeline.range_end).getTime() : 1;
   const span = Math.max(1, end - start);

@@ -243,3 +243,4 @@ src/
 - 2026-07-26: door and vibration interval API plus reusable green-on-muted timeline card implemented for the first end-to-end timeline slice.
 - 2026-07-26: React image deployed on `charo-vps`; 17 live channels, temperature meters, family trends and both timeline types pass production smoke checks.
 - 2026-07-26: temperature meter refined to a 10–36 °C horizontal semicircle with continuous gradient; locations and exact last-reading timestamps moved to English UI.
+- 2026-07-26: event timelines now refresh when a WebSocket reading changes, so active/clear vibration and open/closed door intervals appear without reloading the page.
