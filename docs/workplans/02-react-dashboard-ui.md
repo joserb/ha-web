@@ -172,7 +172,7 @@ src/
 ### Phase 2 — Shell, language and themes
 
 - [x] Implement the responsive dashboard shell using shadcn/ui.
-- [ ] Move every visible string to English.
+- [x] Move every visible string to English.
 - [x] Implement `System`, `Light` and `Dark` without initial theme flash.
 - [x] Implement the global time-range selector and preference persistence.
 - [ ] Add loading, empty, error, disconnected and stale states.
@@ -195,10 +195,10 @@ src/
 
 ### Phase 5 — Door and vibration timelines
 
-- [ ] Normalize vibration into the dashboard catalog.
+- [x] Normalize vibration into the dashboard catalog.
 - [ ] Implement backend interval construction and boundary-state queries.
-- [ ] Implement the reusable event timeline card.
-- [ ] Use green active intervals and muted no-event background.
+- [x] Implement the reusable event timeline card.
+- [x] Use green active intervals and muted no-event background.
 - [ ] Add summaries and accessible tooltip/focus behavior.
 - [ ] Verify duplicate, incomplete and ongoing intervals.
 
@@ -208,7 +208,7 @@ src/
 - [ ] Test responsive layouts at mobile, tablet and desktop widths.
 - [ ] Test both explicit themes and live system-theme changes.
 - [ ] Validate against current `zro-pi` retained data and historical Home Assistant data.
-- [ ] Deploy through Tailscale and run smoke/end-to-end checks.
+- [x] Deploy through Tailscale and run smoke/end-to-end checks.
 - [ ] Remove the prototype frontend only after rollback verification.
 
 ## Acceptance criteria
@@ -240,3 +240,4 @@ src/
 - 2026-07-26: foundation typecheck and production build pass with zero reported npm vulnerabilities; responsive shell, global range and three-way theme preference are implemented.
 - 2026-07-26: live catalog integration, four temperature gauges and Recharts family trends for humidity, pressure and battery pass typecheck and production build.
 - 2026-07-26: door and vibration interval API plus reusable green-on-muted timeline card implemented for the first end-to-end timeline slice.
+- 2026-07-26: React image deployed on `charo-vps`; 17 live channels, temperature meters, family trends and both timeline types pass production smoke checks.
