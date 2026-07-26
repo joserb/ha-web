@@ -1,6 +1,7 @@
 node_modules/
 __pycache__/
 *.py[cod]
+mosquitto/config/conf.d/bridge.conf
 .env
 *.log
 .DS_Store

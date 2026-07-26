@@ -1,0 +1,14 @@
+# Copiar como bridge.conf en el VPS y completar remote_password.
+# El fichero real contiene secretos y está ignorado por Git.
+connection pihomeblk-1
+address 100.120.246.118:1883
+remote_username mqtt_user
+remote_password CHANGE_ME
+start_type automatic
+cleansession true
+try_private false
+notifications true
+notifications_local_only true
+
+# Solo se replica telemetría normalizada desde la Raspberry al VPS.
+topic /ZRO/env/# in 0
