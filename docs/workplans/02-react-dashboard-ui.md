@@ -1,5 +1,5 @@
 ---
-status: designed
+status: in-progress
 created: 2026-07-26
 updated: 2026-07-26
 ---
@@ -163,18 +163,18 @@ src/
 
 ### Phase 1 — React foundation
 
-- [ ] Create the React 19 + TypeScript + Vite application.
-- [ ] Configure Tailwind CSS v4 and shadcn/ui aliases/tokens.
+- [x] Create the React 19 + TypeScript + Vite application.
+- [x] Configure Tailwind CSS v4 and shadcn/ui aliases/tokens.
 - [ ] Add lint, type-check, unit-test and production-build commands.
 - [ ] Build a multi-stage frontend image and update Compose/Nginx.
 - [ ] Preserve a simple rollback to the existing static frontend.
 
 ### Phase 2 — Shell, language and themes
 
-- [ ] Implement the responsive dashboard shell using shadcn/ui.
+- [x] Implement the responsive dashboard shell using shadcn/ui.
 - [ ] Move every visible string to English.
-- [ ] Implement `System`, `Light` and `Dark` without initial theme flash.
-- [ ] Implement the global time-range selector and preference persistence.
+- [x] Implement `System`, `Light` and `Dark` without initial theme flash.
+- [x] Implement the global time-range selector and preference persistence.
 - [ ] Add loading, empty, error, disconnected and stale states.
 
 ### Phase 3 — Data contracts and trends
@@ -236,3 +236,5 @@ src/
 ## Progress log
 
 - 2026-07-26: plan designed from the supplied gauge/timeline reference and review of `zro-dashboard` trend components.
+- 2026-07-26: execution started with an isolated React 19/Vite/Tailwind v4 foundation so the current static dashboard remains available during migration.
+- 2026-07-26: foundation typecheck and production build pass with zero reported npm vulnerabilities; responsive shell, global range and three-way theme preference are implemented.
