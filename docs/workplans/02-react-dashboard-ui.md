@@ -104,6 +104,7 @@ Door opening and vibration activity use interval timelines rather than numeric c
 - Green rectangles represent active intervals:
   - Door: open → closed.
   - Vibration: active → clear.
+- Active intervals keep a minimum visual width of 6 px at every zoom/range so short events remain discoverable; tooltips preserve their real duration.
 - An interval still active at the end of the range continues to `now` and receives an `Active now` label.
 - Hover/focus tooltip shows start, end and duration.
 - Summary shows current state, event count, total active duration and longest interval.
@@ -244,3 +245,4 @@ src/
 - 2026-07-26: React image deployed on `charo-vps`; 17 live channels, temperature meters, family trends and both timeline types pass production smoke checks.
 - 2026-07-26: temperature meter refined to a 10–36 °C horizontal semicircle with continuous gradient; locations and exact last-reading timestamps moved to English UI.
 - 2026-07-26: event timelines now refresh when a WebSocket reading changes, so active/clear vibration and open/closed door intervals appear without reloading the page.
+- 2026-07-26: timeline intervals now retain a 6 px minimum visible width and remain inside the right edge at every range.

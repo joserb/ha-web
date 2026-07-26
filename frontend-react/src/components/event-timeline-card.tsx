@@ -27,7 +27,12 @@ export function EventTimelineCard({ sensor, range }: { sensor: Sensor; range: Ti
         {timeline?.intervals.map((item, index) => {
           const left = ((new Date(item.start).getTime() - start) / span) * 100;
           const width = Math.max(0.35, ((new Date(item.end).getTime() - new Date(item.start).getTime()) / span) * 100);
-          return <div key={`${item.start}-${index}`} className="absolute inset-y-0 rounded-sm bg-emerald-500" style={{ left: `${left}%`, width: `${width}%` }} title={`${new Date(item.start).toLocaleString()} – ${item.active ? "Active now" : new Date(item.end).toLocaleString()}`} />;
+          return <div
+            key={`${item.start}-${index}`}
+            className="absolute inset-y-0 min-w-[6px] rounded-sm bg-emerald-500"
+            style={{ left: `min(${left}%, calc(100% - 6px))`, width: `${width}%` }}
+            title={`${new Date(item.start).toLocaleString()} – ${item.active ? "Active now" : new Date(item.end).toLocaleString()}`}
+          />;
         })}
       </div>
       <div className="mt-2 flex justify-between text-xs text-muted-foreground"><span>{timeline ? new Date(timeline.range_start).toLocaleString() : "Loading…"}</span><span>Now</span></div>
