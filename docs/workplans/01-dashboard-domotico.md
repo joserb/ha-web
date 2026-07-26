@@ -113,6 +113,8 @@ El dashboard tendrá un selector global con estos valores exactos:
 
 ## Plan de ejecución
 
+La migración detallada de interfaz, cards y visualizaciones se ejecuta mediante [`02-react-dashboard-ui.md`](02-react-dashboard-ui.md). Este plan conserva la visión completa del servicio y sus requisitos operativos.
+
 ### Fase 0 — Salvaguarda y línea base
 
 - [x] Crear backup verificable de InfluxDB y configuraciones persistentes.
