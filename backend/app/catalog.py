@@ -21,6 +21,7 @@ class SensorDefinition(BaseModel):
     minimum: float | None = None
     maximum: float | None = None
     warning_above: float | None = None
+    warning_below: float | None = None
     stale_after_seconds: int = Field(gt=0, le=31_536_000)
 
     @model_validator(mode="after")
@@ -54,3 +55,61 @@ class SensorCatalog(BaseModel):
 def load_catalog() -> SensorCatalog:
     path = Path(__file__).with_name("sensors.json")
     return SensorCatalog.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+METRIC_DEFINITIONS = {
+    "temperature": {
+        "measurement": "temp", "label": "Temperatura", "family": "temperatures",
+        "kind": "temperature", "card": "meter", "unit": "°C",
+        "minimum": -10, "maximum": 50,
+    },
+    "humidity": {
+        "measurement": "humidity", "label": "Humedad", "family": "humidities",
+        "kind": "humidity", "card": "meter", "unit": "%",
+        "minimum": 0, "maximum": 100, "warning_above": 70,
+    },
+    "pressure": {
+        "measurement": "pressure", "label": "Presión", "family": "pressures",
+        "kind": "pressure", "card": "meter", "unit": "hPa",
+        "minimum": 900, "maximum": 1100,
+    },
+    "battery": {
+        "measurement": "battery", "label": "Batería", "family": "batteries",
+        "kind": "battery", "card": "meter", "unit": "%",
+        "minimum": 0, "maximum": 100, "warning_below": 20,
+    },
+}
+
+
+def build_zro_catalog(devices: dict[str, dict]) -> SensorCatalog:
+    sensors = []
+    for device, state in sorted(devices.items()):
+        location = f"home/{device}"
+        location_label = device.replace("-", " ").title()
+        for source, definition in METRIC_DEFINITIONS.items():
+            value = state.get(source)
+            if not isinstance(value, (int, float)) or isinstance(value, bool):
+                continue
+            measurement = definition["measurement"]
+            sensors.append({
+                "id": f"{device.replace('-', '_')}_{measurement}",
+                "topic": f"{location}/{measurement}",
+                "location": location,
+                "location_label": location_label,
+                **definition,
+                "stale_after_seconds": 86400,
+            })
+        if state.get("type") == "contact":
+            sensors.append({
+                "id": f"{device.replace('-', '_')}_door",
+                "topic": f"{location}/door",
+                "location": location,
+                "location_label": location_label,
+                "measurement": "door",
+                "label": "Puerta",
+                "family": "doors",
+                "kind": "door",
+                "card": "timeline",
+                "stale_after_seconds": 86400,
+            })
+    return SensorCatalog.model_validate({"sensors": sensors})

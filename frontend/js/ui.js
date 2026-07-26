@@ -376,7 +376,8 @@ function updateMeterCard(topic, parsed, value) {
     meter.style.width = `${percentage}%`;
     meter.classList.toggle(
       "is-warning",
-      sensorType.warning_above != null && value >= sensorType.warning_above,
+      (sensorType.warning_above != null && value >= sensorType.warning_above)
+      || (sensorType.warning_below != null && value <= sensorType.warning_below),
     );
   }
   track?.setAttribute("aria-valuenow", value.toString());

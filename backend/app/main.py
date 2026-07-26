@@ -10,9 +10,10 @@ from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 
-from app.catalog import load_catalog
+from app.catalog import build_zro_catalog, load_catalog
 from app.current_state import CurrentState, build_recovered_states
 from app.time_ranges import TimeRange, get_legacy_hours_spec, get_time_range_spec
+from app.zro_env import decode_env_message, normalize_device
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ query_api = influx_client.query_api()
 # Estado en memoria
 connected_clients: list[WebSocket] = []
 current_states: dict[str, CurrentState] = {}
+zro_devices: dict[str, dict] = {}
 
 
 def recover_current_states():
@@ -54,7 +56,7 @@ def recover_current_states():
     logger.info("Recovered %d current sensor states from InfluxDB", len(current_states))
 
 
-def write_to_influx(topic: str, payload: str):
+def write_to_influx(topic: str, payload: str, timestamp: datetime | None = None):
     """Intenta parsear el payload como JSON y guardar cada campo numérico."""
     try:
         data = json.loads(payload)
@@ -73,7 +75,7 @@ def write_to_influx(topic: str, payload: str):
                 else:
                     point = point.field(key, str(value))
 
-            write_api.write(bucket=INFLUX_BUCKET, record=point)
+            write_api.write(bucket=INFLUX_BUCKET, record=point.time(timestamp) if timestamp else point)
         else:
             # Payload es un valor simple
             try:
@@ -84,7 +86,7 @@ def write_to_influx(topic: str, payload: str):
                     point = point.tag("location", parts[0]).tag("measurement", parts[1]).field("value", value)
                 else:
                     point = point.tag("topic", topic).field("value", value)
-                write_api.write(bucket=INFLUX_BUCKET, record=point)
+                write_api.write(bucket=INFLUX_BUCKET, record=point.time(timestamp) if timestamp else point)
             except ValueError:
                 pass
     except json.JSONDecodeError:
@@ -92,7 +94,7 @@ def write_to_influx(topic: str, payload: str):
         try:
             value = float(payload)
             point = Point("sensor").tag("topic", topic).field("value", value)
-            write_api.write(bucket=INFLUX_BUCKET, record=point)
+            write_api.write(bucket=INFLUX_BUCKET, record=point.time(timestamp) if timestamp else point)
         except ValueError:
             # Guardar como estado string (ej: puerta "open"/"closed")
             parts = topic.rsplit("/", 1)
@@ -101,7 +103,43 @@ def write_to_influx(topic: str, payload: str):
                 point = point.tag("location", parts[0]).tag("measurement", parts[1]).field("state", payload.strip())
             else:
                 point = point.tag("topic", topic).field("state", payload.strip())
-            write_api.write(bucket=INFLUX_BUCKET, record=point)
+            write_api.write(bucket=INFLUX_BUCKET, record=point.time(timestamp) if timestamp else point)
+
+
+async def handle_zro_env_message(topic: str, payload: str) -> bool:
+    if not topic.startswith("/ZRO/env/"):
+        return False
+    try:
+        devices = decode_env_message(topic, payload)
+    except (json.JSONDecodeError, ValueError):
+        logger.warning("Invalid zro-pi environment payload on %s", topic)
+        return True
+
+    zro_devices.update(devices)
+    for device, data in devices.items():
+        for reading in normalize_device(device, data):
+            state = CurrentState(reading.payload, reading.updated_at, "zro-pi")
+            previous = current_states.get(reading.topic)
+            current_states[reading.topic] = state
+            if previous is None or previous.updated_at != reading.updated_at:
+                await asyncio.to_thread(
+                    write_to_influx,
+                    reading.topic,
+                    reading.payload,
+                    reading.updated_at,
+                )
+            message = json.dumps({
+                "topic": reading.topic,
+                "payload": reading.payload,
+                "updated_at": reading.updated_at.isoformat(),
+                "source": "zro-pi",
+            })
+            for ws in connected_clients.copy():
+                try:
+                    await ws.send_text(message)
+                except Exception:
+                    connected_clients.remove(ws)
+    return True
 
 
 async def mqtt_listener():
@@ -117,6 +155,8 @@ async def mqtt_listener():
                 async for message in client.messages:
                     topic = str(message.topic)
                     payload = message.payload.decode()
+                    if await handle_zro_env_message(topic, payload):
+                        continue
                     current_states[topic] = CurrentState(
                         payload=payload,
                         updated_at=datetime.now(timezone.utc),
@@ -165,14 +205,15 @@ async def health():
 
 @app.get("/api/catalog")
 async def catalog():
-    return load_catalog()
+    return build_zro_catalog(zro_devices) if zro_devices else load_catalog()
 
 
 @app.get("/api/sensors")
 async def sensors():
     result = []
     now = datetime.now(timezone.utc)
-    for sensor in load_catalog().sensors:
+    sensor_catalog = build_zro_catalog(zro_devices) if zro_devices else load_catalog()
+    for sensor in sensor_catalog.sensors:
         state = current_states.get(sensor.topic)
         age_seconds = None if state is None else max(
             0,

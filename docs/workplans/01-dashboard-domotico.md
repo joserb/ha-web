@@ -223,3 +223,4 @@ El dashboard tendrá un selector global con estos valores exactos:
 - 2026-07-26: corregida la mezcla de módulos antiguos y nuevos en caché mediante versionado de imports y `Cache-Control: no-store`.
 - 2026-07-26: aclarada la fuente de verdad actual: `zro-pi` en `pihomeblk-1`; Home Assistant pertenece solo al histórico previo.
 - 2026-07-26: iniciado el bridge MQTT RPi → VPS mediante Tailscale para `/ZRO/env/#`.
+- 2026-07-26: bridge verificado con siete retained; iniciada la adaptación del contrato `zro-pi` al esquema histórico `home/{ubicación}/{medida}`.
