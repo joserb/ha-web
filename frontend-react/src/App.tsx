@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { DashboardHeader } from "@/components/dashboard-header";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { TemperatureMeterCard } from "@/components/temperature-meter-card";
+import { TrendCard } from "@/components/trend-card";
+import { useDashboardData } from "@/hooks/use-dashboard-data";
 import { useTheme } from "@/hooks/use-theme";
 import type { TimeRange } from "@/lib/ranges";
 
@@ -13,6 +15,7 @@ function initialRange(): TimeRange {
 export default function App() {
   const [range, setRangeState] = useState<TimeRange>(initialRange);
   const { theme, setTheme } = useTheme();
+  const { sensors, loading, error, connected } = useDashboardData();
 
   function setRange(value: TimeRange) {
     localStorage.setItem("ha-web.time-range", value);
@@ -22,23 +25,29 @@ export default function App() {
   return (
     <main className="mx-auto min-h-screen max-w-[1600px] p-4 sm:p-6 lg:p-8">
       <DashboardHeader
-        connected={false}
+        connected={connected}
         range={range}
         onRangeChange={setRange}
         theme={theme}
         onThemeChange={setTheme}
       />
-      <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>Dashboard foundation ready</CardTitle>
-            <CardDescription>Sensor cards will be connected in the next implementation slice.</CardDescription>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            React 19, Tailwind CSS v4 and project-owned shadcn/ui components are active.
-          </CardContent>
-        </Card>
-      </div>
+      {loading && <p className="mt-8 text-sm text-muted-foreground">Loading sensors…</p>}
+      {error && <p className="mt-8 text-sm text-destructive">Unable to load sensors: {error}</p>}
+      {!loading && !error && <>
+        <section className="mt-6" aria-labelledby="temperature-heading">
+          <h2 id="temperature-heading" className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Temperature</h2>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {sensors.filter((sensor) => sensor.kind === "temperature").map((sensor) => <TemperatureMeterCard key={sensor.id} sensor={sensor} />)}
+          </div>
+        </section>
+        <section className="mt-8 space-y-4" aria-labelledby="trends-heading">
+          <h2 id="trends-heading" className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Trends</h2>
+          {[["Humidity", "humidities"], ["Pressure", "pressures"], ["Battery", "batteries"]].map(([title, family]) => {
+            const familySensors = sensors.filter((sensor) => sensor.family === family);
+            return familySensors.length ? <TrendCard key={family} title={title} sensors={familySensors} range={range} /> : null;
+          })}
+        </section>
+      </>}
     </main>
   );
 }

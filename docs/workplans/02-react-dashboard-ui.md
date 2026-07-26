@@ -180,7 +180,7 @@ src/
 ### Phase 3 — Data contracts and trends
 
 - [ ] Add the batch trend API and typed frontend client.
-- [ ] Port the useful Recharts conventions from `zro-dashboard`.
+- [x] Port the useful Recharts conventions from `zro-dashboard`.
 - [ ] Implement stacked trend cards by compatible family.
 - [ ] Implement family and channel selectors with persisted choices.
 - [ ] Verify all ten time ranges and bounded point counts.
@@ -188,8 +188,8 @@ src/
 ### Phase 4 — Temperature meters
 
 - [ ] Add configurable temperature domains and zones to catalog metadata.
-- [ ] Implement the responsive SVG semicircular meter.
-- [ ] Apply cold-blue, comfort-green and heat-yellow/orange/red zones.
+- [x] Implement the responsive SVG semicircular meter.
+- [x] Apply cold-blue, comfort-green and heat-yellow/orange/red zones.
 - [ ] Add current value, unit, freshness and compact trend.
 - [ ] Verify boundary values and reduced-motion behavior.
 
@@ -238,3 +238,4 @@ src/
 - 2026-07-26: plan designed from the supplied gauge/timeline reference and review of `zro-dashboard` trend components.
 - 2026-07-26: execution started with an isolated React 19/Vite/Tailwind v4 foundation so the current static dashboard remains available during migration.
 - 2026-07-26: foundation typecheck and production build pass with zero reported npm vulnerabilities; responsive shell, global range and three-way theme preference are implemented.
+- 2026-07-26: live catalog integration, four temperature gauges and Recharts family trends for humidity, pressure and battery pass typecheck and production build.
