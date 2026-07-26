@@ -1,8 +1,8 @@
 // app.js — WebSocket connection, message dispatch
 
-import { loadSensorCatalog, shouldIgnore, parseTopic } from "./sensors.js";
-import { createOrUpdateCard, setConnectionStatus } from "./ui.js";
-import { initTimeRangeControl } from "./time-range.js";
+import { loadSensorCatalog, shouldIgnore, parseTopic } from "./sensors.js?v=20260726-1";
+import { createOrUpdateCard, setConnectionStatus } from "./ui.js?v=20260726-1";
+import { initTimeRangeControl } from "./time-range.js?v=20260726-1";
 
 let ws;
 

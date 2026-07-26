@@ -217,3 +217,4 @@ El dashboard tendrá un selector global con estos valores exactos:
 - 2026-07-26: recuperación verificada después de reiniciar el backend; seis canales reales reaparecen desde InfluxDB y exponen antigüedad y estado obsoleto.
 - 2026-07-26: iniciado el consumo del catálogo en frontend y la card numérica `meter`.
 - 2026-07-26: frontend dirigido por catálogo y cards `meter` desplegados; seis sensores recuperan estado, antigüedad y condición obsoleta.
+- 2026-07-26: corregida la mezcla de módulos antiguos y nuevos en caché mediante versionado de imports y `Cache-Control: no-store`.

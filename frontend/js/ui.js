@@ -1,6 +1,6 @@
 // ui.js — Creación y actualización de cards y componentes DOM
 
-import { getSelectedRange, getSelectedRangeLabel } from "./time-range.js";
+import { getSelectedRange, getSelectedRangeLabel } from "./time-range.js?v=20260726-1";
 
 const cards = {};
 const gauges = {};
