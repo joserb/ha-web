@@ -74,19 +74,20 @@ The visual reference is the supplied semicircular gauge: prominent current value
 
 ### Zones
 
-Default domestic temperature zones are configurable per sensor but start with:
+The temperature meter uses a continuous gradient over an exact horizontal semicircle. Its domain is `10..36 °C`: 10 °C at the left/180° endpoint, 23 °C at the upper/90° midpoint and 36 °C at the right/0° endpoint.
+
+Default visual progression:
 
 | Range | Meaning | Color direction |
 |---|---|---|
-| below 10 °C | very cold | darkest blue |
-| 10–16 °C | cold | medium blue |
-| 16–20 °C | cool | light blue |
+| 10–16 °C | cold | dark to light blue |
+| 16–20 °C | cool | light blue to green |
 | 20–23 °C | comfortable | green |
 | 23–26 °C | warm | yellow |
 | 26–30 °C | hot | orange |
 | above 30 °C | very hot | red |
 
-- The scale must not imply that ordinary domestic values span 0–100; default temperature domain is configurable and initially `-5..45 °C`.
+- The scale must not imply that ordinary domestic values span 0–100; its fixed initial display domain is `10..36 °C`.
 - The current value, unit, last-update age and stale state remain readable without interpreting color.
 - The needle and arc are SVG/React, responsive and keyboard-independent; do not use a raster gauge.
 - Reduced-motion preferences disable needle animation.
@@ -241,3 +242,4 @@ src/
 - 2026-07-26: live catalog integration, four temperature gauges and Recharts family trends for humidity, pressure and battery pass typecheck and production build.
 - 2026-07-26: door and vibration interval API plus reusable green-on-muted timeline card implemented for the first end-to-end timeline slice.
 - 2026-07-26: React image deployed on `charo-vps`; 17 live channels, temperature meters, family trends and both timeline types pass production smoke checks.
+- 2026-07-26: temperature meter refined to a 10–36 °C horizontal semicircle with continuous gradient; locations and exact last-reading timestamps moved to English UI.

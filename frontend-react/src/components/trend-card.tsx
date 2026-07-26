@@ -21,12 +21,17 @@ export function TrendCard({ title, sensors, range }: { title: string; sensors: S
     return [...rows.values()].sort((a, b) => String(a.time).localeCompare(String(b.time)));
   }, [series]);
   const unit = sensors[0]?.unit ?? "";
+  const latest = sensors.reduce<Date | null>((result, sensor) => {
+    if (!sensor.current) return result;
+    const date = new Date(sensor.current.updated_at);
+    return result === null || date > result ? date : result;
+  }, null);
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
-        <CardDescription>{sensors.length} channels · {range}</CardDescription>
+        <CardDescription>{sensors.length} channels · {range}{latest ? ` · Last reading: ${latest.toLocaleString()}` : ""}</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="h-64">

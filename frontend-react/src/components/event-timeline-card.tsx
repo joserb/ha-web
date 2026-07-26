@@ -19,7 +19,7 @@ export function EventTimelineCard({ sensor, range }: { sensor: Sensor; range: Ti
   return <Card>
     <CardHeader>
       <CardTitle>{sensor.location_label} {sensor.kind === "door" ? "Door" : "Vibration"}</CardTitle>
-      <CardDescription>{timeline?.intervals.length ?? 0} events · {Math.round(totalMs / 60000)} active minutes</CardDescription>
+      <CardDescription>{timeline?.intervals.length ?? 0} events · {Math.round(totalMs / 60000)} active minutes{sensor.current ? ` · Last reading: ${new Date(sensor.current.updated_at).toLocaleString()}` : ""}</CardDescription>
     </CardHeader>
     <CardContent>
       <div className="relative h-10 overflow-hidden rounded-md bg-muted" aria-label={`${sensor.label} activity timeline`}>

@@ -80,12 +80,22 @@ METRIC_DEFINITIONS = {
     },
 }
 
+LOCATION_LABELS = {
+    "bano": "Bathroom",
+    "comedero-gatos": "Cat feeder",
+    "entrada": "Entrance",
+    "estudio": "Office",
+    "habitacion": "Bedroom",
+    "salon": "Living room",
+    "terraza": "Terrace",
+}
+
 
 def build_zro_catalog(devices: dict[str, dict]) -> SensorCatalog:
     sensors = []
     for device, state in sorted(devices.items()):
         location = f"home/{device}"
-        location_label = device.replace("-", " ").title()
+        location_label = LOCATION_LABELS.get(device, device.replace("-", " ").title())
         for source, definition in METRIC_DEFINITIONS.items():
             value = state.get(source)
             if not isinstance(value, (int, float)) or isinstance(value, bool):
