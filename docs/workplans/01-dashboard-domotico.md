@@ -24,6 +24,7 @@ El producto final debe mostrar valores actuales, tendencias multicanal e interva
 - MQTT, InfluxDB y FastAPI permanecerán en redes privadas de Docker o ligados a localhost/Tailscale.
 - Separar lectura de sensores y control de actuadores. El navegador no podrá publicar topics MQTT arbitrarios.
 - Incorporar un catálogo de sensores versionado como fuente de nombres, unidades, familias, límites y visualización.
+- Considerar `pihomeblk` y su instancia de Home Assistant como fuente de verdad del inventario doméstico. El catálogo servido por el VPS será una proyección sincronizada o descubierta desde esa fuente, no un inventario paralelo mantenido manualmente.
 
 ### Rangos temporales globales
 
@@ -123,6 +124,7 @@ El dashboard tendrá un selector global con estos valores exactos:
 - [ ] Separar configuración, MQTT, InfluxDB, API y WebSocket.
 - [ ] Introducir modelos Pydantic y validación estricta.
 - [x] Implementar catálogo versionado de sensores y esquema de validación.
+- [ ] Importar o sincronizar el inventario real de entidades desde Home Assistant en `pihomeblk`.
 - [ ] Crear endpoints normalizados de catálogo, valores actuales, tendencias e intervalos.
 - [x] Implementar rangos temporales mediante enumeración cerrada y ventanas controladas.
 - [ ] Añadir consulta multicanal por lotes.
@@ -218,3 +220,4 @@ El dashboard tendrá un selector global con estos valores exactos:
 - 2026-07-26: iniciado el consumo del catálogo en frontend y la card numérica `meter`.
 - 2026-07-26: frontend dirigido por catálogo y cards `meter` desplegados; seis sensores recuperan estado, antigüedad y condición obsoleta.
 - 2026-07-26: corregida la mezcla de módulos antiguos y nuevos en caché mediante versionado de imports y `Cache-Control: no-store`.
+- 2026-07-26: aclarada la fuente de verdad: el inventario de sensores pertenece a Home Assistant en `pihomeblk`; el catálogo actual del VPS es provisional hasta sincronizarlo.
