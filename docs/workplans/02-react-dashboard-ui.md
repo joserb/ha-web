@@ -166,7 +166,7 @@ src/
 - [x] Create the React 19 + TypeScript + Vite application.
 - [x] Configure Tailwind CSS v4 and shadcn/ui aliases/tokens.
 - [ ] Add lint, type-check, unit-test and production-build commands.
-- [ ] Build a multi-stage frontend image and update Compose/Nginx.
+- [x] Build a multi-stage frontend image and update Compose/Nginx.
 - [ ] Preserve a simple rollback to the existing static frontend.
 
 ### Phase 2 — Shell, language and themes
