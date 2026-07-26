@@ -140,9 +140,9 @@ El dashboard tendrá un selector global con estos valores exactos:
 
 ### Fase 3 — Sistema de dashboard y cards
 
-- [ ] Consumir el catálogo desde la API.
+- [x] Consumir el catálogo desde la API.
 - [ ] Crear layout y registro común de cards.
-- [ ] Implementar card `meter`.
+- [x] Implementar card `meter`.
 - [ ] Implementar card `timeline`.
 - [ ] Implementar sección de tendencias apiladas.
 - [x] Añadir selector global `1h`–`forever`.
@@ -216,3 +216,4 @@ El dashboard tendrá un selector global con estos valores exactos:
 - 2026-07-26: iniciado el catálogo versionado de sensores y la recuperación de valores actuales desde InfluxDB.
 - 2026-07-26: recuperación verificada después de reiniciar el backend; seis canales reales reaparecen desde InfluxDB y exponen antigüedad y estado obsoleto.
 - 2026-07-26: iniciado el consumo del catálogo en frontend y la card numérica `meter`.
+- 2026-07-26: frontend dirigido por catálogo y cards `meter` desplegados; seis sensores recuperan estado, antigüedad y condición obsoleta.
