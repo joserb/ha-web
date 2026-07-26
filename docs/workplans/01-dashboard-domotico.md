@@ -125,7 +125,7 @@ El dashboard tendrá un selector global con estos valores exactos:
 - [ ] Separar configuración, MQTT, InfluxDB, API y WebSocket.
 - [ ] Introducir modelos Pydantic y validación estricta.
 - [x] Implementar catálogo versionado de sensores y esquema de validación.
-- [ ] Importar o sincronizar el inventario real desde la configuración y los mensajes normalizados de `zro-pi` en `pihomeblk-1`.
+- [x] Importar o sincronizar el inventario real desde la configuración y los mensajes normalizados de `zro-pi` en `pihomeblk-1`.
 - [ ] Crear endpoints normalizados de catálogo, valores actuales, tendencias e intervalos.
 - [x] Implementar rangos temporales mediante enumeración cerrada y ventanas controladas.
 - [ ] Añadir consulta multicanal por lotes.
@@ -134,6 +134,7 @@ El dashboard tendrá un selector global con estos valores exactos:
 
 ### Fase 2 — Estado MQTT fiable
 
+- [x] Replicar `/ZRO/env/#` desde `pihomeblk-1` al VPS mediante bridge MQTT sobre Tailscale.
 - [ ] Normalizar topics `state`, `availability` y `set`.
 - [ ] Usar mensajes retenidos para el valor actual.
 - [x] Detectar datos obsoletos mediante `stale_after`.
@@ -224,3 +225,4 @@ El dashboard tendrá un selector global con estos valores exactos:
 - 2026-07-26: aclarada la fuente de verdad actual: `zro-pi` en `pihomeblk-1`; Home Assistant pertenece solo al histórico previo.
 - 2026-07-26: iniciado el bridge MQTT RPi → VPS mediante Tailscale para `/ZRO/env/#`.
 - 2026-07-26: bridge verificado con siete retained; iniciada la adaptación del contrato `zro-pi` al esquema histórico `home/{ubicación}/{medida}`.
+- 2026-07-26: adaptador desplegado; 16 canales frescos se descubren desde `zro-pi` y se escriben conservando continuidad con el histórico anterior de Home Assistant.
