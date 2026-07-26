@@ -112,4 +112,17 @@ def build_zro_catalog(devices: dict[str, dict]) -> SensorCatalog:
                 "card": "timeline",
                 "stale_after_seconds": 86400,
             })
+        elif state.get("type") == "vibration":
+            sensors.append({
+                "id": f"{device.replace('-', '_')}_vibration",
+                "topic": f"{location}/vibration",
+                "location": location,
+                "location_label": location_label,
+                "measurement": "vibration",
+                "label": "Vibration",
+                "family": "vibrations",
+                "kind": "vibration",
+                "card": "timeline",
+                "stale_after_seconds": 86400,
+            })
     return SensorCatalog.model_validate({"sensors": sensors})

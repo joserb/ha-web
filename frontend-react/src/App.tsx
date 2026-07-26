@@ -2,6 +2,7 @@ import { useState } from "react";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { TemperatureMeterCard } from "@/components/temperature-meter-card";
 import { TrendCard } from "@/components/trend-card";
+import { EventTimelineCard } from "@/components/event-timeline-card";
 import { useDashboardData } from "@/hooks/use-dashboard-data";
 import { useTheme } from "@/hooks/use-theme";
 import type { TimeRange } from "@/lib/ranges";
@@ -46,6 +47,12 @@ export default function App() {
             const familySensors = sensors.filter((sensor) => sensor.family === family);
             return familySensors.length ? <TrendCard key={family} title={title} sensors={familySensors} range={range} /> : null;
           })}
+        </section>
+        <section className="mt-8 space-y-4" aria-labelledby="events-heading">
+          <h2 id="events-heading" className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Activity timelines</h2>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {sensors.filter((sensor) => sensor.card === "timeline").map((sensor) => <EventTimelineCard key={sensor.id} sensor={sensor} range={range} />)}
+          </div>
         </section>
       </>}
     </main>

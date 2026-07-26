@@ -239,3 +239,4 @@ src/
 - 2026-07-26: execution started with an isolated React 19/Vite/Tailwind v4 foundation so the current static dashboard remains available during migration.
 - 2026-07-26: foundation typecheck and production build pass with zero reported npm vulnerabilities; responsive shell, global range and three-way theme preference are implemented.
 - 2026-07-26: live catalog integration, four temperature gauges and Recharts family trends for humidity, pressure and battery pass typecheck and production build.
+- 2026-07-26: door and vibration interval API plus reusable green-on-muted timeline card implemented for the first end-to-end timeline slice.

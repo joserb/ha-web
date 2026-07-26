@@ -12,6 +12,7 @@ from influxdb_client.client.write_api import SYNCHRONOUS
 
 from app.catalog import build_zro_catalog, load_catalog
 from app.current_state import CurrentState, build_recovered_states
+from app.intervals import build_intervals, range_start
 from app.time_ranges import TimeRange, get_legacy_hours_spec, get_time_range_spec
 from app.zro_env import decode_env_message, normalize_device
 
@@ -297,6 +298,32 @@ async def events(
                 "value": record.get_value()
             })
     return results
+
+
+@app.get("/api/intervals")
+async def intervals(
+    sensor_id: str = Query(pattern=r"^[a-z0-9_]+$", max_length=96),
+    period: TimeRange = Query(default=TimeRange.DAY_1, alias="range"),
+):
+    sensor_catalog = build_zro_catalog(zro_devices) if zro_devices else load_catalog()
+    sensor = next((item for item in sensor_catalog.sensors if item.id == sensor_id), None)
+    if sensor is None or sensor.kind not in {"door", "vibration"}:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Timeline sensor not found")
+    event_rows = await events(sensor.location, sensor.measurement, period, None)
+    now = datetime.now(timezone.utc)
+    active_values = {"open"} if sensor.kind == "door" else {"active"}
+    normalized = [{**row, "time": datetime.fromisoformat(row["time"])} for row in event_rows]
+    result = build_intervals(normalized, active_values, now)
+    start = range_start(period, now)
+    if period == TimeRange.FOREVER and normalized:
+        start = normalized[0]["time"]
+    return {
+        "sensor_id": sensor.id,
+        "range_start": start.isoformat(),
+        "range_end": now.isoformat(),
+        "intervals": [{**item, "start": item["start"].isoformat(), "end": item["end"].isoformat()} for item in result],
+    }
 
 
 @app.websocket("/ws")
