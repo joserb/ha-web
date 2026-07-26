@@ -113,7 +113,7 @@ El dashboard tendrá un selector global con estos valores exactos:
 
 ### Fase 0 — Salvaguarda y línea base
 
-- [ ] Crear backup verificable de InfluxDB y configuraciones persistentes.
+- [x] Crear backup verificable de InfluxDB y configuraciones persistentes.
 - [ ] Documentar restauración y rollback.
 - [ ] Registrar versiones, uso de disco y estado inicial de los servicios.
 - [ ] Añadir una comprobación automatizada de endpoints existentes.
@@ -124,7 +124,7 @@ El dashboard tendrá un selector global con estos valores exactos:
 - [ ] Introducir modelos Pydantic y validación estricta.
 - [ ] Implementar catálogo versionado de sensores y esquema de validación.
 - [ ] Crear endpoints normalizados de catálogo, valores actuales, tendencias e intervalos.
-- [ ] Implementar rangos temporales mediante enumeración cerrada y ventanas controladas.
+- [x] Implementar rangos temporales mediante enumeración cerrada y ventanas controladas.
 - [ ] Añadir consulta multicanal por lotes.
 - [ ] Añadir pruebas unitarias para topics, payloads, rangos e intervalos.
 - [ ] Evitar operaciones síncronas de InfluxDB dentro del bucle asíncrono.
@@ -145,7 +145,7 @@ El dashboard tendrá un selector global con estos valores exactos:
 - [ ] Implementar card `meter`.
 - [ ] Implementar card `timeline`.
 - [ ] Implementar sección de tendencias apiladas.
-- [ ] Añadir selector global `1h`–`forever`.
+- [x] Añadir selector global `1h`–`forever`.
 - [ ] Añadir selector de familias y canales.
 - [ ] Persistir rango, familias, canales y layout.
 - [ ] Adaptar la interfaz a móvil, tableta y escritorio.
@@ -212,3 +212,4 @@ El dashboard tendrá un selector global con estos valores exactos:
 
 - 2026-07-26: plan inicial creado a partir de la auditoría del despliegue activo.
 - 2026-07-26: ejecución iniciada con el contrato de rangos temporales y el selector global del dashboard.
+- 2026-07-26: backup online creado y primera entrega desplegada; los diez rangos, la compatibilidad con `hours` y el rechazo de rangos inválidos quedan verificados en el VPS.
