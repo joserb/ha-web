@@ -122,20 +122,20 @@ El dashboard tendrá un selector global con estos valores exactos:
 
 - [ ] Separar configuración, MQTT, InfluxDB, API y WebSocket.
 - [ ] Introducir modelos Pydantic y validación estricta.
-- [ ] Implementar catálogo versionado de sensores y esquema de validación.
+- [x] Implementar catálogo versionado de sensores y esquema de validación.
 - [ ] Crear endpoints normalizados de catálogo, valores actuales, tendencias e intervalos.
 - [x] Implementar rangos temporales mediante enumeración cerrada y ventanas controladas.
 - [ ] Añadir consulta multicanal por lotes.
 - [ ] Añadir pruebas unitarias para topics, payloads, rangos e intervalos.
-- [ ] Evitar operaciones síncronas de InfluxDB dentro del bucle asíncrono.
+- [x] Evitar operaciones síncronas de InfluxDB dentro del bucle asíncrono.
 
 ### Fase 2 — Estado MQTT fiable
 
 - [ ] Normalizar topics `state`, `availability` y `set`.
 - [ ] Usar mensajes retenidos para el valor actual.
-- [ ] Detectar datos obsoletos mediante `stale_after`.
+- [x] Detectar datos obsoletos mediante `stale_after`.
 - [ ] Crear usuarios separados y ACL de mínimo privilegio.
-- [ ] Recuperar estado desde MQTT retenido o InfluxDB tras reinicios.
+- [x] Recuperar estado desde MQTT retenido o InfluxDB tras reinicios.
 - [ ] Rechazar publicación MQTT arbitraria desde WebSocket.
 
 ### Fase 3 — Sistema de dashboard y cards
@@ -214,3 +214,4 @@ El dashboard tendrá un selector global con estos valores exactos:
 - 2026-07-26: ejecución iniciada con el contrato de rangos temporales y el selector global del dashboard.
 - 2026-07-26: backup online creado y primera entrega desplegada; los diez rangos, la compatibilidad con `hours` y el rechazo de rangos inválidos quedan verificados en el VPS.
 - 2026-07-26: iniciado el catálogo versionado de sensores y la recuperación de valores actuales desde InfluxDB.
+- 2026-07-26: recuperación verificada después de reiniciar el backend; seis canales reales reaparecen desde InfluxDB y exponen antigüedad y estado obsoleto.

@@ -6,11 +6,12 @@ from app.catalog import SensorCatalog, load_catalog
 class SensorCatalogTests(unittest.TestCase):
     def test_packaged_catalog_is_valid(self):
         catalog = load_catalog()
-        self.assertEqual(len(catalog.sensors), 5)
+        self.assertEqual(len(catalog.sensors), 6)
         self.assertEqual(
             {sensor.card for sensor in catalog.sensors},
             {"meter", "timeline"},
         )
+        self.assertIn("humidities", {sensor.family for sensor in catalog.sensors})
 
     def test_duplicate_topics_are_rejected(self):
         sensor = load_catalog().sensors[0].model_dump()

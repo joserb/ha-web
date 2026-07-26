@@ -33,6 +33,22 @@
       "stale_after_seconds": 3600
     },
     {
+      "id": "salon_humidity",
+      "topic": "home/salon/humidity",
+      "location": "home/salon",
+      "location_label": "Salón",
+      "measurement": "humidity",
+      "label": "Humedad",
+      "family": "humidities",
+      "kind": "humidity",
+      "card": "meter",
+      "unit": "%",
+      "minimum": 0,
+      "maximum": 100,
+      "warning_above": 70,
+      "stale_after_seconds": 3600
+    },
+    {
       "id": "bedroom_temperature",
       "topic": "home/habitacion/temp",
       "location": "home/habitacion",
