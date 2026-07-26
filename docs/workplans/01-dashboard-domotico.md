@@ -213,3 +213,4 @@ El dashboard tendrá un selector global con estos valores exactos:
 - 2026-07-26: plan inicial creado a partir de la auditoría del despliegue activo.
 - 2026-07-26: ejecución iniciada con el contrato de rangos temporales y el selector global del dashboard.
 - 2026-07-26: backup online creado y primera entrega desplegada; los diez rangos, la compatibilidad con `hours` y el rechazo de rangos inválidos quedan verificados en el VPS.
+- 2026-07-26: iniciado el catálogo versionado de sensores y la recuperación de valores actuales desde InfluxDB.

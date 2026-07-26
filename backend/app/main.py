@@ -1,14 +1,20 @@
 import asyncio
 import json
+import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 import aiomqtt
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 
+from app.catalog import load_catalog
+from app.current_state import CurrentState, build_recovered_states
 from app.time_ranges import TimeRange, get_legacy_hours_spec, get_time_range_spec
+
+logger = logging.getLogger(__name__)
 
 # Config InfluxDB
 INFLUX_URL = os.getenv("INFLUXDB_URL", "http://influxdb:8086")
@@ -22,7 +28,30 @@ query_api = influx_client.query_api()
 
 # Estado en memoria
 connected_clients: list[WebSocket] = []
-last_messages: dict[str, str] = {}
+current_states: dict[str, CurrentState] = {}
+
+
+def recover_current_states():
+    query = f'''
+    from(bucket: "{INFLUX_BUCKET}")
+      |> range(start: 0)
+      |> filter(fn: (r) => r._measurement == "sensor")
+      |> filter(fn: (r) => exists r.location and exists r.measurement)
+      |> group(columns: ["location", "measurement", "_field"])
+      |> last()
+    '''
+    rows = []
+    for table in query_api.query(query):
+        for record in table.records:
+            rows.append({
+                "location": record.values.get("location"),
+                "measurement": record.values.get("measurement"),
+                "field": record.get_field(),
+                "value": record.get_value(),
+                "time": record.get_time(),
+            })
+    current_states.update(build_recovered_states(rows))
+    logger.info("Recovered %d current sensor states from InfluxDB", len(current_states))
 
 
 def write_to_influx(topic: str, payload: str):
@@ -88,10 +117,14 @@ async def mqtt_listener():
                 async for message in client.messages:
                     topic = str(message.topic)
                     payload = message.payload.decode()
-                    last_messages[topic] = payload
+                    current_states[topic] = CurrentState(
+                        payload=payload,
+                        updated_at=datetime.now(timezone.utc),
+                        source="mqtt",
+                    )
 
                     # Guardar en InfluxDB
-                    write_to_influx(topic, payload)
+                    await asyncio.to_thread(write_to_influx, topic, payload)
 
                     # Reenviar a WebSocket
                     data = json.dumps({"topic": topic, "payload": payload})
@@ -101,11 +134,16 @@ async def mqtt_listener():
                         except Exception:
                             connected_clients.remove(ws)
         except Exception:
+            logger.exception("MQTT listener failed; retrying in 5 seconds")
             await asyncio.sleep(5)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    try:
+        await asyncio.to_thread(recover_current_states)
+    except Exception:
+        logger.exception("Could not recover current states from InfluxDB")
     task = asyncio.create_task(mqtt_listener())
     yield
     task.cancel()
@@ -117,7 +155,35 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "topics": list(last_messages.keys())}
+    return {"status": "ok", "topics": list(current_states.keys())}
+
+
+@app.get("/api/catalog")
+async def catalog():
+    return load_catalog()
+
+
+@app.get("/api/sensors")
+async def sensors():
+    result = []
+    now = datetime.now(timezone.utc)
+    for sensor in load_catalog().sensors:
+        state = current_states.get(sensor.topic)
+        age_seconds = None if state is None else max(
+            0,
+            int((now - state.updated_at).total_seconds()),
+        )
+        result.append({
+            **sensor.model_dump(),
+            "current": None if state is None else {
+                "payload": state.payload,
+                "updated_at": state.updated_at.isoformat(),
+                "source": state.source,
+                "age_seconds": age_seconds,
+                "stale": age_seconds > sensor.stale_after_seconds,
+            },
+        })
+    return result
 
 
 @app.get("/api/history")
@@ -192,8 +258,8 @@ async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
     connected_clients.append(ws)
 
-    for topic, payload in last_messages.items():
-        await ws.send_text(json.dumps({"topic": topic, "payload": payload}))
+    for topic, state in current_states.items():
+        await ws.send_text(json.dumps({"topic": topic, "payload": state.payload}))
 
     try:
         while True:
