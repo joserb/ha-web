@@ -54,7 +54,7 @@ export function TrendCard({ title, sensors, range }: { title: string; sensors: S
                     <XAxis dataKey="time" tickFormatter={(value) => new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} minTickGap={48} />
                     <YAxis unit={unit} tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} width={52} domain={title === "Battery" ? [0, 100] : ["auto", "auto"]} />
                     <Tooltip labelFormatter={(value) => new Date(String(value)).toLocaleString()} formatter={(value, name) => [`${Number(value).toFixed(1)}${unit}`, sensors.find((sensor) => sensor.id === name)?.location_label ?? name]} />
-                    {sensors.map((sensor, index) => <Line key={sensor.id} dataKey={sensor.id} type="monotone" stroke={colors[index % colors.length]} dot={false} strokeWidth={2} connectNulls={false} isAnimationActive={false} hide={hiddenChannels.has(sensor.id)} />)}
+                    {sensors.map((sensor, index) => <Line key={sensor.id} dataKey={sensor.id} type="monotone" stroke={colors[index % colors.length]} dot={false} strokeWidth={2} connectNulls isAnimationActive={false} hide={hiddenChannels.has(sensor.id)} />)}
                   </LineChart>
                 </ResponsiveContainer>}
         </div>
