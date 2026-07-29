@@ -43,7 +43,7 @@ export default function App() {
         </section>
         <section className="mt-8 space-y-4" aria-labelledby="trends-heading">
           <h2 id="trends-heading" className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Trends</h2>
-          {[["Humidity", "humidities"], ["Pressure", "pressures"], ["Battery", "batteries"]].map(([title, family]) => {
+          {[["Temperature", "temperatures"], ["Humidity", "humidities"], ["Pressure", "pressures"], ["Battery", "batteries"]].map(([title, family]) => {
             const familySensors = sensors.filter((sensor) => sensor.family === family);
             return familySensors.length ? <TrendCard key={family} title={title} sensors={familySensors} range={range} /> : null;
           })}

@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { useMemo, useState } from "react";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useTrends } from "@/hooks/use-trends";
 import type { TimeRange } from "@/lib/ranges";
@@ -9,6 +9,7 @@ const colors = ["#22c55e", "#3b82f6", "#f97316", "#a855f7", "#06b6d4", "#eab308"
 
 export function TrendCard({ title, sensors, range }: { title: string; sensors: Sensor[]; range: TimeRange }) {
   const { series, loading, error } = useTrends(sensors, range);
+  const [hiddenChannels, setHiddenChannels] = useState<Set<string>>(() => new Set());
   const data = useMemo(() => {
     const rows = new Map<string, Record<string, string | number>>();
     for (const item of series) {
@@ -27,6 +28,15 @@ export function TrendCard({ title, sensors, range }: { title: string; sensors: S
     return result === null || date > result ? date : result;
   }, null);
 
+  function toggleChannel(sensorId: string) {
+    setHiddenChannels((current) => {
+      const next = new Set(current);
+      if (next.has(sensorId)) next.delete(sensorId);
+      else next.add(sensorId);
+      return next;
+    });
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -44,11 +54,26 @@ export function TrendCard({ title, sensors, range }: { title: string; sensors: S
                     <XAxis dataKey="time" tickFormatter={(value) => new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} minTickGap={48} />
                     <YAxis unit={unit} tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} width={52} domain={title === "Battery" ? [0, 100] : ["auto", "auto"]} />
                     <Tooltip labelFormatter={(value) => new Date(String(value)).toLocaleString()} formatter={(value, name) => [`${Number(value).toFixed(1)}${unit}`, sensors.find((sensor) => sensor.id === name)?.location_label ?? name]} />
-                    <Legend formatter={(value) => sensors.find((sensor) => sensor.id === value)?.location_label ?? value} />
-                    {sensors.map((sensor, index) => <Line key={sensor.id} dataKey={sensor.id} type="monotone" stroke={colors[index % colors.length]} dot={false} strokeWidth={2} connectNulls={false} isAnimationActive={false} />)}
+                    {sensors.map((sensor, index) => <Line key={sensor.id} dataKey={sensor.id} type="monotone" stroke={colors[index % colors.length]} dot={false} strokeWidth={2} connectNulls={false} isAnimationActive={false} hide={hiddenChannels.has(sensor.id)} />)}
                   </LineChart>
                 </ResponsiveContainer>}
         </div>
+        {!loading && !error && data.length > 0 && <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-2" aria-label={`${title} channels`}>
+          {sensors.map((sensor, index) => {
+            const hidden = hiddenChannels.has(sensor.id);
+            return <button
+              key={sensor.id}
+              type="button"
+              className={`flex items-center gap-1.5 text-xs transition-opacity ${hidden ? "opacity-40 line-through" : "opacity-100"}`}
+              onClick={() => toggleChannel(sensor.id)}
+              aria-pressed={!hidden}
+              title={`${hidden ? "Show" : "Hide"} ${sensor.location_label}`}
+            >
+              <span className="inline-block h-0.5 w-4" style={{ backgroundColor: colors[index % colors.length] }} />
+              {sensor.location_label}
+            </button>;
+          })}
+        </div>}
       </CardContent>
     </Card>
   );
