@@ -93,8 +93,9 @@ services:
       - "${TS_BIND_IP:?}:8080:80"
     restart: unless-stopped
     healthcheck:
-      # La imagen es nginx:alpine: wget de busybox, sin curl.
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:80/"]
+      # La imagen es nginx:alpine: wget de busybox, sin curl. 127.0.0.1 y no
+      # localhost: busybox resuelve localhost a ::1 y nginx solo escucha IPv4.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:80/"]
       interval: 30s
       timeout: 10s
       retries: 3
