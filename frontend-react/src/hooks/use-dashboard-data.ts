@@ -1,19 +1,52 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fetchSensors } from "@/lib/api";
-import type { Sensor } from "@/types/sensors";
+import type { ConnectionChain, PiAvailability, Sensor } from "@/types/sensors";
 
-interface SocketMessage {
+interface SensorMessage {
+  type?: "sensor";
   topic: string;
   payload: string;
   updated_at?: string;
   source?: string;
 }
 
+interface LinkMessage {
+  type: "link";
+  mqtt_connected: boolean;
+  bridge_connected: boolean | null;
+  pi_availability: PiAvailability | null;
+}
+
+type SocketMessage = SensorMessage | LinkMessage;
+
+// Ages are recomputed from the real reading timestamp on this tick, so a dead
+// sensor keeps ageing while the tab is open.
+const AGE_TICK_MS = 30_000;
+
+const DISCONNECTED: ConnectionChain = {
+  socket: "disconnected",
+  mqttConnected: null,
+  bridgeConnected: null,
+  piAvailability: null,
+};
+
+function withAge(sensor: Sensor, now: number): Sensor {
+  if (!sensor.current) return sensor;
+  const readAt = new Date(sensor.current.updated_at).getTime();
+  if (!Number.isFinite(readAt)) return sensor;
+  const age = Math.max(0, Math.round((now - readAt) / 1000));
+  return {
+    ...sensor,
+    current: { ...sensor.current, age_seconds: age, stale: age > sensor.stale_after_seconds },
+  };
+}
+
 export function useDashboardData() {
   const [sensors, setSensors] = useState<Sensor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [connected, setConnected] = useState(false);
+  const [chain, setChain] = useState<ConnectionChain>({ ...DISCONNECTED, socket: "connecting" });
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     const controller = new AbortController();
@@ -29,6 +62,11 @@ export function useDashboardData() {
   }, []);
 
   useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), AGE_TICK_MS);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     let retry: number | undefined;
     let socket: WebSocket | undefined;
     let stopped = false;
@@ -36,9 +74,20 @@ export function useDashboardData() {
     const connect = () => {
       const protocol = location.protocol === "https:" ? "wss:" : "ws:";
       socket = new WebSocket(`${protocol}//${location.host}/ws`);
-      socket.onopen = () => setConnected(true);
+      socket.onopen = () => setChain((current) => ({ ...current, socket: "connected" }));
       socket.onmessage = (event) => {
         const message = JSON.parse(event.data) as SocketMessage;
+        if (message.type === "link") {
+          setChain((current) => ({
+            ...current,
+            mqttConnected: message.mqtt_connected,
+            bridgeConnected: message.bridge_connected,
+            piAvailability: message.pi_availability,
+          }));
+          return;
+        }
+        // The reading's own timestamp, never "now": a reconnect must not make a
+        // dead sensor look fresh. Age and staleness are derived from it below.
         setSensors((current) => current.map((sensor) => sensor.topic === message.topic ? {
           ...sensor,
           current: {
@@ -49,9 +98,14 @@ export function useDashboardData() {
             stale: false,
           },
         } : sensor));
+        setNow(Date.now());
       };
       socket.onclose = () => {
-        setConnected(false);
+        // Everything beyond our own socket becomes unknown: the broker and the
+        // bridge were only observable through it. A closed socket reads as
+        // disconnected even though we retry — an eternal "connecting…" would be
+        // the same lie the old binary indicator told.
+        setChain(DISCONNECTED);
         if (!stopped) retry = window.setTimeout(connect, 3000);
       };
     };
@@ -63,5 +117,7 @@ export function useDashboardData() {
     };
   }, []);
 
-  return { sensors, loading, error, connected };
+  const aged = useMemo(() => sensors.map((sensor) => withAge(sensor, now)), [sensors, now]);
+
+  return { sensors: aged, loading, error, chain };
 }

@@ -7,3 +7,5 @@ mosquitto/config/conf.d/bridge.conf
 .env
 *.log
 .DS_Store
+# Registro y candados del vigilante del stack (scripts/stack-watchdog.sh)
+.health/

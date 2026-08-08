@@ -55,10 +55,10 @@
 
 ## Endpoints API
 
-- `GET /api/health` — Estado del backend y topics activos
+- `GET /api/health` — Salud real: `mqtt_connected`, `influxdb_connected`, `bridge_connected`, `pi_availability` y topics activos. Devuelve **503** si falta el broker o InfluxDB (es la sonda del healthcheck de Docker y del vigilante); el bridge y la Pi son informativos y no tumban el contenedor
 - `GET /api/history?location=...&measurement=...&hours=24` — Histórico numérico agregado en ventanas de 5min (media)
 - `GET /api/events?location=...&measurement=...&hours=24` — Eventos individuales sin agregar (estado string, ej: puerta open/closed)
-- `WS /ws` — WebSocket bidireccional: recibe datos en tiempo real, envía comandos MQTT
+- `WS /ws` — WebSocket bidireccional: emite mensajes `type: "sensor"` (lecturas) y `type: "link"` (estado de la cadena backend → broker → bridge → Pi). Publicar en MQTT desde el navegador solo se admite en los topics de `WS_PUBLISH_ALLOWLIST`, vacía por defecto
 
 ## Estructura de topics MQTT
 
@@ -86,8 +86,15 @@
 
 ## Configuración sensible
 
-- Todo en `.env` (nunca en Git)
-- Variables: MQTT_HOST, MQTT_PORT, MQTT_USER, MQTT_PASSWORD, INFLUXDB_URL, INFLUXDB_TOKEN, INFLUXDB_ORG, INFLUXDB_BUCKET, INFLUXDB_USER, INFLUXDB_PASSWORD
+- Todo en `.env` (nunca en Git). Plantilla comentada en `.env.example`
+- Variables: TS_BIND_IP, MQTT_HOST, MQTT_PORT, MQTT_USER, MQTT_PASSWORD, WS_PUBLISH_ALLOWLIST, INFLUXDB_URL, INFLUXDB_TOKEN, INFLUXDB_ORG, INFLUXDB_BUCKET, INFLUXDB_USER, INFLUXDB_PASSWORD, SENSOR_STALE_AFTER_SECONDS, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+- `mosquitto/config/conf.d/bridge.conf` también es local al VPS (plantilla en `bridge.conf.example`)
+
+## Resiliencia
+
+- Los cuatro servicios tienen healthcheck y rotación de logs; `depends_on` espera a `service_healthy`
+- `scripts/stack-watchdog.sh` corre en el host por cron cada minuto: recrea contenedores caídos, sin red o `unhealthy`, y el backend si `/api/health` falla ~5 min. Registro en `.health/watchdog.json`, alertas opcionales por Telegram
+- Pasos de host (sysctl `ip_nonlocal_bind` y cron): `docs/operacion-host.md`
 
 ## Esquema InfluxDB
 

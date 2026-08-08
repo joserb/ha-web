@@ -1,9 +1,12 @@
 import { Activity, MonitorCog, Moon, Sun } from "lucide-react";
+import { ConnectionChip } from "@/components/connection-chip";
 import type { ThemePreference } from "@/hooks/use-theme";
+import { chainSubtitle } from "@/lib/link";
 import { timeRanges, type TimeRange } from "@/lib/ranges";
+import type { ConnectionChain } from "@/types/sensors";
 
 interface DashboardHeaderProps {
-  connected: boolean;
+  chain: ConnectionChain;
   range: TimeRange;
   onRangeChange: (range: TimeRange) => void;
   theme: ThemePreference;
@@ -25,7 +28,7 @@ export function DashboardHeader(props: DashboardHeaderProps) {
           <Activity className="size-5 text-primary" aria-hidden="true" />
           <h1 className="text-xl font-semibold tracking-tight">Home Sensors</h1>
         </div>
-        <p className="mt-1 text-sm text-muted-foreground">Live conditions from pihomeblk-1</p>
+        <p className="mt-1 text-sm text-muted-foreground">{chainSubtitle(props.chain)}</p>
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <label className="grid gap-1 text-xs font-medium text-muted-foreground">
@@ -51,9 +54,8 @@ export function DashboardHeader(props: DashboardHeaderProps) {
             </select>
           </span>
         </label>
-        <div className="mt-5 flex items-center gap-2 text-sm text-muted-foreground" role="status">
-          <span className={`size-2 rounded-full ${props.connected ? "bg-emerald-500" : "bg-destructive"}`} />
-          {props.connected ? "Live" : "Disconnected"}
+        <div className="mt-5" role="status">
+          <ConnectionChip chain={props.chain} />
         </div>
       </div>
     </header>

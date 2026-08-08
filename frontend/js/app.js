@@ -17,7 +17,10 @@ function connect() {
   };
 
   ws.onmessage = (e) => {
-    const { topic, payload, updated_at, source } = JSON.parse(e.data);
+    const { type, topic, payload, updated_at, source } = JSON.parse(e.data);
+    // Los mensajes de estado del enlace (type "link") no traen topic: este
+    // dashboard no los pinta, pero tampoco puede atragantarse con ellos.
+    if (type === "link" || !topic) return;
     if (shouldIgnore(topic)) return;
 
     const parsed = parseTopic(topic);

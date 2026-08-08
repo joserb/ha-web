@@ -1,6 +1,14 @@
+import os
 import unittest
+from unittest import mock
 
-from app.catalog import SensorCatalog, load_catalog
+from app.catalog import (
+    DEFAULT_STALE_AFTER_SECONDS,
+    SensorCatalog,
+    build_zro_catalog,
+    load_catalog,
+    stale_after_seconds,
+)
 
 
 class SensorCatalogTests(unittest.TestCase):
@@ -24,6 +32,27 @@ class SensorCatalogTests(unittest.TestCase):
         sensor["topic"] = "home/another/temp"
         with self.assertRaises(ValueError):
             SensorCatalog.model_validate({"sensors": [sensor]})
+
+
+class StaleLimitTests(unittest.TestCase):
+    def test_default_is_one_hour_when_unset(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(stale_after_seconds(), DEFAULT_STALE_AFTER_SECONDS)
+
+    def test_environment_overrides_the_default(self):
+        with mock.patch.dict("os.environ", {"SENSOR_STALE_AFTER_SECONDS": "900"}):
+            self.assertEqual(stale_after_seconds(), 900)
+
+    def test_invalid_values_fall_back_to_the_default(self):
+        for raw in ["0", "-1", "cuatro", "99999999999"]:
+            with mock.patch.dict("os.environ", {"SENSOR_STALE_AFTER_SECONDS": raw}):
+                self.assertEqual(stale_after_seconds(), DEFAULT_STALE_AFTER_SECONDS, raw)
+
+    def test_generated_catalog_uses_the_configured_limit(self):
+        device = {"type": "climate", "temperature": 21.0}
+        with mock.patch.dict("os.environ", {"SENSOR_STALE_AFTER_SECONDS": "1800"}):
+            catalog = build_zro_catalog({"salon": device})
+        self.assertEqual({sensor.stale_after_seconds for sensor in catalog.sensors}, {1800})
 
 
 if __name__ == "__main__":

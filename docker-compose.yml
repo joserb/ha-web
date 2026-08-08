@@ -8,8 +8,23 @@ services:
       - mosquitto-log:/mosquitto/log
     ports:
       - "127.0.0.1:1883:1883"
-      - "100.120.178.39:1883:1883"
+      # IP de Tailscale del VPS (TS_BIND_IP en .env). Obligatoria: sin ella el
+      # broker quedaría solo en localhost y ni la Raspberry ni MQTT Studio
+      # podrían conectarse, en silencio.
+      - "${TS_BIND_IP:?}:1883:1883"
     restart: unless-stopped
+    healthcheck:
+      # Estar 'Up' no es estar sirviendo: se pide de verdad un mensaje al
+      # broker. $$SYS escapa el $ para que lo expanda el contenedor, no compose.
+      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/broker/uptime", "-C", "1", "-W", "5", "-u", "${MQTT_USER}", "-P", "${MQTT_PASSWORD}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
 
   influxdb:
     image: influxdb:2
@@ -26,25 +41,68 @@ services:
     ports:
       - "127.0.0.1:8086:8086"
     restart: unless-stopped
+    healthcheck:
+      # /health es el endpoint propio de InfluxDB 2 y no necesita token. Se
+      # prueban curl y wget porque la imagen no garantiza ninguno de los dos.
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8086/health >/dev/null 2>&1 || wget -q -O /dev/null http://localhost:8086/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
 
   backend:
     build: ./backend
     env_file: .env
     depends_on:
-      - mosquitto
-      - influxdb
+      mosquitto:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
     ports:
       - "127.0.0.1:8000:8000"
     restart: unless-stopped
+    healthcheck:
+      # /api/health devuelve 503 si el listener no está conectado al broker o
+      # si InfluxDB no responde: un backend "arriba" pero mudo es justo el
+      # fallo que no se veía. La imagen no trae curl, así que se usa su python.
+      test: ["CMD", "python", "-c", "import sys,urllib.request; sys.exit(0 if b'\"status\":\"healthy\"' in urllib.request.urlopen('http://localhost:8000/api/health', timeout=5).read() else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # Arrancar incluye recuperar el estado actual desde InfluxDB, conectar al
+      # broker y recibir los retenidos.
+      start_period: 90s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
 
   nginx:
     build: ./frontend-react
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
       - "127.0.0.1:8080:80"
-      - "100.120.178.39:8080:80"
+      - "${TS_BIND_IP:?}:8080:80"
     restart: unless-stopped
+    healthcheck:
+      # La imagen es nginx:alpine: wget de busybox, sin curl.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
 
 volumes:
   mosquitto-data:

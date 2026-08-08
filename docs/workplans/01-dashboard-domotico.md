@@ -1,7 +1,7 @@
 ---
 status: in-progress
 created: 2026-07-26
-updated: 2026-07-26
+updated: 2026-08-08
 ---
 
 # Dashboard doméstico: evolución de `ha-web`
@@ -142,7 +142,7 @@ La migración detallada de interfaz, cards y visualizaciones se ejecuta mediante
 - [x] Detectar datos obsoletos mediante `stale_after`.
 - [ ] Crear usuarios separados y ACL de mínimo privilegio.
 - [x] Recuperar estado desde MQTT retenido o InfluxDB tras reinicios.
-- [ ] Rechazar publicación MQTT arbitraria desde WebSocket.
+- [x] Rechazar publicación MQTT arbitraria desde WebSocket (allowlist de topics en `WS_PUBLISH_ALLOWLIST`, vacía por defecto).
 
 ### Fase 3 — Sistema de dashboard y cards
 
@@ -176,7 +176,7 @@ La migración detallada de interfaz, cards y visualizaciones se ejecuta mediante
 ### Fase 6 — Operación y conservación de datos
 
 - [ ] Fijar versiones de imágenes y dependencias.
-- [ ] Añadir healthchecks, límites y rotación de logs.
+- [x] Añadir healthchecks y rotación de logs (10m × 3) en los cuatro servicios. Pendientes los límites de CPU y memoria.
 - [ ] Definir retención y downsampling de InfluxDB.
 - [ ] Automatizar backups cifrados fuera del VPS.
 - [ ] Probar una restauración completa.

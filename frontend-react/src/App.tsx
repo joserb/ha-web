@@ -16,7 +16,7 @@ function initialRange(): TimeRange {
 export default function App() {
   const [range, setRangeState] = useState<TimeRange>(initialRange);
   const { theme, setTheme } = useTheme();
-  const { sensors, loading, error, connected } = useDashboardData();
+  const { sensors, loading, error, chain } = useDashboardData();
 
   function setRange(value: TimeRange) {
     localStorage.setItem("ha-web.time-range", value);
@@ -26,7 +26,7 @@ export default function App() {
   return (
     <main className="mx-auto min-h-screen max-w-[1600px] p-4 sm:p-6 lg:p-8">
       <DashboardHeader
-        connected={connected}
+        chain={chain}
         range={range}
         onRangeChange={setRange}
         theme={theme}

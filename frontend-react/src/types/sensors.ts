@@ -27,6 +27,22 @@ export interface Sensor {
   current: CurrentReading | null;
 }
 
+export type SocketStatus = "connecting" | "connected" | "disconnected";
+export type PiAvailability = "online" | "offline";
+
+/**
+ * The three independent legs between this page and the sensors. Each one is
+ * reported separately because a healthy WebSocket only proves the browser
+ * reached the backend, and a healthy broker only proves the VPS leg. `null`
+ * means unknown, never "fine".
+ */
+export interface ConnectionChain {
+  socket: SocketStatus;
+  mqttConnected: boolean | null;
+  bridgeConnected: boolean | null;
+  piAvailability: PiAvailability | null;
+}
+
 export interface HistoryPoint {
   time: string;
   field: string;

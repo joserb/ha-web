@@ -7,12 +7,15 @@ from datetime import datetime, timezone
 
 import aiomqtt
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse
 from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 
 from app.catalog import build_zro_catalog, load_catalog
 from app.current_state import CurrentState, build_recovered_states
 from app.intervals import build_intervals, range_start
+from app.link_state import LinkState
+from app.publish_policy import is_allowed, load_allowlist
 from app.time_ranges import TimeRange, get_legacy_hours_spec, get_time_range_spec
 from app.zro_env import decode_env_message, normalize_device
 
@@ -28,10 +31,39 @@ influx_client = InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_OR
 write_api = influx_client.write_api(write_options=SYNCHRONOUS)
 query_api = influx_client.query_api()
 
+# Topics en los que el navegador puede publicar. Vacío = ninguno (ver
+# app/publish_policy.py).
+PUBLISH_ALLOWLIST = load_allowlist(os.getenv("WS_PUBLISH_ALLOWLIST"))
+
 # Estado en memoria
 connected_clients: list[WebSocket] = []
 current_states: dict[str, CurrentState] = {}
 zro_devices: dict[str, dict] = {}
+link_state = LinkState()
+# Conexión viva con el broker AHORA MISMO, no "el listener arrancó alguna vez":
+# esa diferencia es la que /api/health tiene que contar y la que el healthcheck
+# de Docker usa para decidir si el contenedor sirve para algo.
+mqtt_connected = False
+
+
+async def broadcast(message: dict):
+    """Envía un mensaje a todos los clientes WebSocket vivos."""
+    data = json.dumps(message)
+    for ws in connected_clients.copy():
+        try:
+            await ws.send_text(data)
+        except Exception:
+            if ws in connected_clients:
+                connected_clients.remove(ws)
+
+
+def link_message() -> dict:
+    """Estado de la cadena backend → broker → bridge → Raspberry."""
+    return {
+        "type": "link",
+        "mqtt_connected": mqtt_connected,
+        **link_state.snapshot(),
+    }
 
 
 def recover_current_states():
@@ -129,22 +161,19 @@ async def handle_zro_env_message(topic: str, payload: str) -> bool:
                     reading.payload,
                     reading.updated_at,
                 )
-            message = json.dumps({
+            await broadcast({
+                "type": "sensor",
                 "topic": reading.topic,
                 "payload": reading.payload,
                 "updated_at": reading.updated_at.isoformat(),
                 "source": "zro-pi",
             })
-            for ws in connected_clients.copy():
-                try:
-                    await ws.send_text(message)
-                except Exception:
-                    connected_clients.remove(ws)
     return True
 
 
 async def mqtt_listener():
     """Se suscribe a MQTT y reenvía a WebSocket + InfluxDB."""
+    global mqtt_connected
     while True:
         try:
             async with aiomqtt.Client(
@@ -153,9 +182,18 @@ async def mqtt_listener():
                 password=os.getenv("MQTT_PASSWORD"),
             ) as client:
                 await client.subscribe("#")
+                mqtt_connected = True
+                await broadcast(link_message())
                 async for message in client.messages:
                     topic = str(message.topic)
                     payload = message.payload.decode()
+                    # Bridge y availability no son sensores: no se guardan en
+                    # InfluxDB ni entran en el catálogo, solo describen el
+                    # camino hasta la Raspberry.
+                    if link_state.handles(topic):
+                        if link_state.apply(topic, payload):
+                            await broadcast(link_message())
+                        continue
                     if await handle_zro_env_message(topic, payload):
                         continue
                     current_states[topic] = CurrentState(
@@ -168,20 +206,24 @@ async def mqtt_listener():
                     await asyncio.to_thread(write_to_influx, topic, payload)
 
                     # Reenviar a WebSocket
-                    data = json.dumps({
+                    await broadcast({
+                        "type": "sensor",
                         "topic": topic,
                         "payload": payload,
                         "updated_at": current_states[topic].updated_at.isoformat(),
                         "source": "mqtt",
                     })
-                    for ws in connected_clients.copy():
-                        try:
-                            await ws.send_text(data)
-                        except Exception:
-                            connected_clients.remove(ws)
         except Exception:
             logger.exception("MQTT listener failed; retrying in 5 seconds")
-            await asyncio.sleep(5)
+        # Se ha perdido el enlace con el broker (fallo o cierre): sin él no
+        # sabemos nada de los tramos que hay detrás, así que se declaran
+        # desconocidos en lugar de seguir mostrando el último retenido.
+        forgotten = link_state.reset()
+        changed = mqtt_connected or forgotten
+        mqtt_connected = False
+        if changed:
+            await broadcast(link_message())
+        await asyncio.sleep(5)
 
 
 @asynccontextmanager
@@ -199,9 +241,36 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
+def ping_influx() -> bool:
+    try:
+        return bool(influx_client.ping())
+    except Exception:
+        logger.warning("InfluxDB no responde al ping", exc_info=True)
+        return False
+
+
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "topics": list(current_states.keys())}
+    """Salud real del backend, no "el proceso sigue en pie".
+
+    Solo tumban el contenedor las dos dependencias sin las cuales este servicio
+    no hace nada: el broker (no llegan datos) e InfluxDB (no se guardan ni se
+    consultan). El bridge y la Raspberry se informan pero NO devuelven 503:
+    reiniciar el backend no arregla un enlace roto en la otra punta, y hacerlo
+    dejaría el dashboard caído además de sin datos nuevos.
+    """
+    influx_ok = await asyncio.to_thread(ping_influx)
+    healthy = mqtt_connected and influx_ok
+    return JSONResponse(
+        {
+            "status": "healthy" if healthy else "unhealthy",
+            "mqtt_connected": mqtt_connected,
+            "influxdb_connected": influx_ok,
+            **link_state.snapshot(),
+            "topics": list(current_states.keys()),
+        },
+        status_code=200 if healthy else 503,
+    )
 
 
 @app.get("/api/catalog")
@@ -331,8 +400,12 @@ async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
     connected_clients.append(ws)
 
+    # El estado del enlace va primero: el cliente pinta la cadena de conexión
+    # antes de tener un solo sensor.
+    await ws.send_text(json.dumps(link_message()))
     for topic, state in current_states.items():
         await ws.send_text(json.dumps({
+            "type": "sensor",
             "topic": topic,
             "payload": state.payload,
             "updated_at": state.updated_at.isoformat(),
@@ -342,13 +415,30 @@ async def websocket_endpoint(ws: WebSocket):
     try:
         while True:
             data = await ws.receive_text()
-            msg = json.loads(data)
-            if "topic" in msg and "payload" in msg:
-                async with aiomqtt.Client(
-                    "mosquitto",
-                    username=os.getenv("MQTT_USER"),
-                    password=os.getenv("MQTT_PASSWORD"),
-                ) as client:
-                    await client.publish(msg["topic"], msg["payload"])
+            try:
+                msg = json.loads(data)
+            except json.JSONDecodeError:
+                logger.warning("Mensaje WebSocket descartado: no es JSON")
+                continue
+            if not isinstance(msg, dict) or "topic" not in msg or "payload" not in msg:
+                continue
+            topic = str(msg["topic"])
+            # El navegador no publica en cualquier topic: solo en los de la
+            # allowlist, vacía mientras no haya panel de actuadores.
+            if not is_allowed(topic, PUBLISH_ALLOWLIST):
+                logger.warning(
+                    "Publicación rechazada en %r: no está en WS_PUBLISH_ALLOWLIST",
+                    topic,
+                )
+                continue
+            async with aiomqtt.Client(
+                "mosquitto",
+                username=os.getenv("MQTT_USER"),
+                password=os.getenv("MQTT_PASSWORD"),
+            ) as client:
+                await client.publish(topic, str(msg["payload"]))
     except WebSocketDisconnect:
-        connected_clients.remove(ws)
+        pass
+    finally:
+        if ws in connected_clients:
+            connected_clients.remove(ws)
