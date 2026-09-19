@@ -7,7 +7,7 @@
 #   cd /opt/projects/ha-web/camera-gateway
 #   cp .env.example .env && cp go2rtc.yaml.example go2rtc.yaml
 #   # editar ambos con la IP Tailscale de la Pi y la URL RTSP autenticada
-#   chmod 600 go2rtc.yaml
+#   sudo chown root:root go2rtc.yaml && sudo chmod 600 go2rtc.yaml
 #   docker compose up -d
 
 services:
@@ -20,6 +20,10 @@ services:
     volumes:
       # Solo lectura: la configuración lleva la URL RTSP con credenciales y no
       # debe poder reescribirse desde el contenedor ni desde la interfaz web.
+      # Debe pertenecer a root: el proceso corre como root pero sin
+      # CAP_DAC_OVERRIDE, así que solo puede leerla si es su propietario. Con
+      # otro dueño y modo 600, go2rtc no la lee y arranca con los valores por
+      # defecto, que exponen la API entera.
       - ./go2rtc.yaml:/config/go2rtc.yaml:ro
     ports:
       # Solo la IP Tailscale de la Pi. Docker publica saltándose ufw, así que
@@ -32,11 +36,13 @@ services:
     cap_drop:
       - ALL
     healthcheck:
-      # La imagen trae curl. Sin -f a propósito: con `allow_paths` restringido
-      # cualquier respuesta HTTP (incluido el 400 del upgrade fallido) prueba
-      # que el proceso sirve; curl solo falla si el puerto no acepta conexión.
-      # Una cámara apagada NO debe marcar la pasarela como enferma.
-      test: ["CMD-SHELL", "curl -s -o /dev/null -m 5 http://127.0.0.1:1984/api/ws || exit 1"]
+      # Comprueba el proceso Y la configuración: /api/streams solo devuelve 404
+      # si `allow_paths` se aplicó. Si el contenedor no pudo leer go2rtc.yaml,
+      # arranca con los valores por defecto y esa ruta responde 200 revelando
+      # la URL de origen; sin esta comprobación el fallo pasa desapercibido
+      # porque el servicio parece funcionar. Una cámara apagada no influye:
+      # aquí no se consulta ningún stream.
+      test: ["CMD-SHELL", "[ \"$$(curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:1984/api/streams)\" = 404 ]"]
       interval: 30s
       timeout: 10s
       retries: 3

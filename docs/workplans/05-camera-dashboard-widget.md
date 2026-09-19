@@ -108,7 +108,7 @@ La integración debe estar tras una opción de despliegue que permita ocultar/de
 - [x] Confirmar IP, autenticación RTSP y códecs.
 - [ ] Registrar configuración actual de la cámara y firmware sin revelar secretos.
 - [x] Preparar las plantillas y seleccionar versión concreta de go2rtc (1.9.14).
-- [ ] Desplegar la pasarela aislada en la Pi y validar el enlace de reproducción desde el VPS.
+- [x] Desplegar la pasarela aislada en la Pi y validar el enlace de reproducción desde el VPS.
 - [ ] Reproducir H.264/AAC en una página mínima de prueba, primero silenciada.
 - [ ] Medir arranque, bitrate, CPU, memoria y cierre de stream; comprobar que no aparece recodificación inesperada.
 
@@ -179,3 +179,22 @@ Verificado en local: `npm run typecheck` y `npm run build` correctos; la plantil
 - `nginx -t` y reproducción real desde escritorio y móvil por Tailscale; medir arranque, bitrate, CPU y memoria.
 - Comprobar que `/api/streams`, `/api/config` y la interfaz web responden 404, y que un `src` alterado desde el navegador no cambia la fuente.
 - Pruebas automatizadas del ciclo de vida del reproductor con transporte simulado: el frontend todavía no tiene runner de pruebas, así que añadirlo es una decisión pendiente.
+
+
+## Despliegue de la pasarela (2026-09-19)
+
+Desplegada en `pihomeblk-1` como proyecto Compose propio en `~/camera-gateway`, junto a `zro-pi` y no en `/opt/projects` (esa ruta es la del VPS y en la Pi no existe). go2rtc 1.9.14 arm64, `healthy`, sin tocar `zro-pi`, Zigbee2MQTT ni Mosquitto de la Pi.
+
+Comprobado desde la propia Pi y desde `charo-vps` por Tailscale: `/api/ws` responde 400 (existe y exige upgrade) y `/`, `/api`, `/api/config`, `/api/streams`, `/api/frame.mp4` y `/api/stream.mp4` responden 404. Dentro del contenedor solo escucha el 1984: ni servidor RTSP ni WebRTC.
+
+### Dos fallos encontrados al desplegar
+
+**El `chmod 600` del plan dejaba la configuración ilegible.** El contenedor corre como root, pero `cap_drop: ALL` le quita `CAP_DAC_OVERRIDE`, así que no puede leer un fichero `0600` de otro propietario. go2rtc no falla al arrancar: registra `config path=...` y continúa **con los valores por defecto**. El primer arranque quedó con el servidor RTSP en 8554, WebRTC en 8555, la interfaz web servida y `/api/streams` devolviendo 200 —la ruta que expone la URL de origen con credenciales—, todo ello con el contenedor marcado `healthy`. La instrucción correcta es `sudo chown root:root go2rtc.yaml` con modo 600: el proceso lee el fichero por ser su propietario y en el host solo root puede verlo.
+
+**El healthcheck no distinguía ese caso.** Comprobaba que el proceso respondiera algo en `/api/ws`, cosa que hacía igual de bien con la configuración cargada que sin ella. Ahora exige que `/api/streams` devuelva 404, que solo ocurre si `allow_paths` se aplicó: una configuración ilegible o inválida sale como `unhealthy` en vez de como un servicio aparentemente sano con la API abierta. Sigue sin depender de la cámara, así que una cámara apagada no marca la pasarela como enferma.
+
+### Cámara no disponible en el momento del despliegue
+
+`192.168.1.199` responde a ARP con MAC `20:bb:bc:69:d8:f8` (Hangzhou Ezviz), o sea que está en la red, pero no responde a ICMP y tiene cerrados 80, 443, 554, 8000, 8554 y 8080. Es el cuadro de una cámara en modo privacidad/suspensión o con RTSP desactivado tras un reinicio, el riesgo que este plan ya anotaba sin verificar. Queda pendiente despertarla y reactivar RTSP desde la aplicación EZVIZ.
+
+La configuración desplegada lleva todavía el marcador `USUARIO:CONTRASENA`: las credenciales no estaban disponibles en esta sesión. Sin ellas y sin cámara accesible no se ha podido reproducir vídeo, medir bitrate ni consumo, ni activar la tarjeta en el VPS.

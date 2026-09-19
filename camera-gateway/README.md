@@ -12,13 +12,25 @@ C6N ──RTSP/TCP── go2rtc (pihomeblk-1) ──MSE/fMP4 por WS sobre Tailsc
 
 ## Instalación
 
+En la Pi vive junto a `zro-pi`, en el directorio del usuario:
+
 ```bash
-cd /opt/projects/ha-web/camera-gateway
+cd ~/camera-gateway
 cp .env.example .env                  # IP Tailscale de la Pi
 cp go2rtc.yaml.example go2rtc.yaml    # URL RTSP con credenciales
-chmod 600 go2rtc.yaml
+sudo chown root:root go2rtc.yaml      # imprescindible, ver abajo
+sudo chmod 600 go2rtc.yaml
 docker compose up -d
 ```
+
+El propietario tiene que ser `root`. El contenedor corre como root pero con
+`cap_drop: ALL`, es decir, sin `CAP_DAC_OVERRIDE`: solo puede leer el fichero
+si es su propietario. Con otro dueño y modo 600 go2rtc **no avisa**, arranca
+con los valores por defecto y deja expuestas la interfaz web y `/api/streams`,
+que devuelve la URL de origen con credenciales. El healthcheck comprueba
+justamente eso, así que un fichero ilegible sale como `unhealthy`.
+
+Editar después con `sudo -e go2rtc.yaml` y `docker compose restart go2rtc`.
 
 `go2rtc.yaml` y `.env` están en `.gitignore`. La URL RTSP autenticada no debe
 copiarse a ningún otro fichero del repositorio ni llegar al navegador.
