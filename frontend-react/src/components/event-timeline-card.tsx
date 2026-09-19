@@ -3,13 +3,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import type { TimeRange } from "@/lib/ranges";
 import { DoorAlertControl, type NotificationState } from "@/components/door-alert-control";
 import type { ConnectionChain, Sensor } from "@/types/sensors";
+import { LONG_SPAN_MS, formatDuration, formatEventTime, recentEvents } from "@/lib/timeline-events";
+
+const RECENT_EVENT_LIMIT = 5;
 
 interface Timeline { range_start: string; range_end: string; intervals: Array<{ start: string; end: string; active: boolean }> }
 interface WindowRange { start: number; end: number }
 
 function formatTick(value: number, span: number) {
   const date = new Date(value);
-  if (span > 36 * 60 * 60 * 1000) {
+  if (span > LONG_SPAN_MS) {
     return date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   }
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -22,6 +25,7 @@ export function EventTimelineCard({ sensor, range, notifications, chain, onNotif
   const [timeline, setTimeline] = useState<Timeline | null>(null);
   const [zoom, setZoom] = useState<WindowRange | null>(null);
   const [selection, setSelection] = useState<{ anchor: number; current: number } | null>(null);
+  const [now, setNow] = useState(Date.now);
   const timelineRef = useRef<HTMLDivElement>(null);
   const latestReading = sensor.current?.updated_at;
   useEffect(() => {
@@ -39,8 +43,22 @@ export function EventTimelineCard({ sensor, range, notifications, chain, onNotif
     const itemEnd = Math.min(end, new Date(item.end).getTime());
     return itemEnd > itemStart ? [{ ...item, visibleStart: itemStart, visibleEnd: itemEnd }] : [];
   }) ?? [], [timeline, start, end]);
-  const totalMs = visibleIntervals.reduce((sum, item) => sum + item.visibleEnd - item.visibleStart, 0);
   const ticks = Array.from({ length: 5 }, (_, index) => start + (span * index) / 4);
+  // The log and the card's own counters come from the same derivation on
+  // purpose: an event still open keeps growing, and a frozen "active minutes"
+  // beside a ticking log would contradict itself inside one card.
+  const allEvents = useMemo(() => recentEvents(visibleIntervals, Number.POSITIVE_INFINITY, now), [visibleIntervals, now]);
+  const events = allEvents.slice(0, RECENT_EVENT_LIMIT);
+  const totalMs = allEvents.reduce((sum, event) => sum + event.durationMs, 0);
+  const ongoing = allEvents.some((event) => event.ongoing);
+  // Ticking only while something is in progress: that is the only case whose
+  // label goes stale on its own, and the card is too heavy to redraw every
+  // second for nothing.
+  useEffect(() => {
+    if (!ongoing) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [ongoing]);
 
   function pointerRatio(event: ReactPointerEvent<HTMLDivElement>) {
     const bounds = timelineRef.current?.getBoundingClientRect();
@@ -106,6 +124,29 @@ export function EventTimelineCard({ sensor, range, notifications, chain, onNotif
         {ticks.map((tick, index) => <span key={tick} className={index === 0 ? "text-left" : index === ticks.length - 1 ? "text-right" : "text-center"}>{timeline ? formatTick(tick, span) : index === 0 ? "Loading…" : ""}</span>)}
       </div>
       <p className="mt-2 text-xs text-muted-foreground">Drag to zoom{zoom ? " · Double-click to return to the page range" : ""}</p>
+      <section className="mt-4 border-t pt-3" aria-labelledby={`recent-${sensor.id}`}>
+        <h3 id={`recent-${sensor.id}`} className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Recent events</h3>
+        {!timeline ? <p className="mt-2 text-sm text-muted-foreground">Loading recent events…</p> : events.length === 0
+          ? <p className="mt-2 text-sm text-muted-foreground">No events in this period</p>
+          : <ol className="mt-2 space-y-1">
+            {events.map((event) => <li key={event.start} className="flex flex-wrap items-baseline gap-x-2 text-sm">
+              <time dateTime={new Date(event.start).toISOString()} className="tabular-nums">{formatEventTime(event.start, span)}</time>
+              <span className="text-muted-foreground">
+                {sensor.kind === "door"
+                  ? event.ongoing ? `Open now · ${formatDuration(event.durationMs)}` : `Open for ${formatDuration(event.durationMs)}`
+                  : event.ongoing ? `Active now · ${formatDuration(event.durationMs)}` : `Detected · ${formatDuration(event.durationMs)}`}
+              </span>
+              {event.clippedStart && <span className="text-xs text-muted-foreground">(started earlier)</span>}
+            </li>)}
+          </ol>}
+        {timeline && visibleIntervals.length > RECENT_EVENT_LIMIT &&
+          <p className="mt-2 text-xs text-muted-foreground">Showing the {RECENT_EVENT_LIMIT} most recent of {visibleIntervals.length} events</p>}
+        {/* An event already under way when the period begins is not rebuilt by
+            the backend yet, so an empty or clipped log must not be read as
+            "nothing happened". */}
+        {timeline && (events.length === 0 || events[events.length - 1].clippedStart) &&
+          <p className="mt-2 text-xs text-muted-foreground">Earlier events may fall outside this period</p>}
+      </section>
     </CardContent>
   </Card>;
 }

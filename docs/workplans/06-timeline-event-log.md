@@ -1,10 +1,12 @@
 ---
-status: planned
+status: implemented
 created: 2026-09-19
 updated: 2026-09-19
 ---
 
 # Log de últimos eventos en las tarjetas de timeline
+
+Decisiones confirmadas por el usuario el 2026-09-19: una fila por intervalo, el log sigue a la ventana visible y aviso explícito de eventos anteriores al periodo. Implementado el mismo día; ver [Implementación](#implementación-2026-09-19).
 
 ## Objetivo y alcance
 
@@ -83,3 +85,25 @@ La verificación automática de `recentEvents` depende de la decisión pendiente
 ## Fuera de alcance
 
 Paginación o histórico completo, exportación, filtros por tipo de evento, resaltar en la barra el intervalo de la fila señalada, y listar los cierres como eventos propios. Ninguno hace falta para responder «qué ha pasado últimamente aquí».
+
+
+## Implementación (2026-09-19)
+
+`frontend-react/src/lib/timeline-events.ts` con `recentEvents(intervals, limit, now)`, `formatDuration` y `formatEventTime`, y la sección `Recent events` al final de `EventTimelineCard`. Sin cambios en el backend, como preveía el plan: ni un endpoint ni una consulta más.
+
+### Un cambio sobre lo planeado
+
+Al probar la función apareció que el criterio «la suma de duraciones del log nunca supera los minutos activos de la tarjeta» se incumplía en cuanto había un evento en curso: el log avanzaba en vivo mientras `active minutes` seguía congelado en el instante de la consulta. A los dos minutos y medio, log 15 min contra contador 13 min dentro de la misma tarjeta.
+
+Se corrige en la raíz en vez de retocar el texto: la descripción de la tarjeta y el log salen ahora de la misma derivación (`recentEvents` sobre todos los intervalos, el log es su recorte a cinco). La coherencia deja de ser algo que haya que recordar mantener y pasa a ser estructural.
+
+### Detalles resueltos
+
+- El reloj de un segundo solo corre mientras hay un evento en curso; es el único caso cuya etiqueta envejece sola, y la tarjeta es cara de repintar.
+- Un intervalo abierto cuyo final recorta el zoom deja de contar como «en curso»: se muestra su duración recortada, porque en esa ventana no está pasando ahora.
+- `LONG_SPAN_MS` se comparte con `formatTick` para que el criterio de mostrar fecha sea uno solo.
+- Las filas son `<ol>` con `<time dateTime>`; la nota `(started earlier)` marca el evento recortado por el borde del periodo.
+
+### Verificación
+
+`npm run typecheck` y `npm run build` correctos. La lógica se comprobó compilando el módulo y ejercitándolo con casos reales: orden descendente, duración de un evento en curso que avanza más allá del instante de la consulta, recorte por el borde del periodo, corte por zoom, límite de cinco, lista vacía y formateo de duraciones de 1 s a más de un día. Queda pendiente la comprobación en navegador y el runner de pruebas del frontend, que sigue sin decidirse.
