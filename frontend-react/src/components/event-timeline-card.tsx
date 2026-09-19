@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { TimeRange } from "@/lib/ranges";
-import type { Sensor } from "@/types/sensors";
+import { DoorAlertControl, type NotificationState } from "@/components/door-alert-control";
+import type { ConnectionChain, Sensor } from "@/types/sensors";
 
 interface Timeline { range_start: string; range_end: string; intervals: Array<{ start: string; end: string; active: boolean }> }
 interface WindowRange { start: number; end: number }
@@ -14,7 +15,10 @@ function formatTick(value: number, span: number) {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-export function EventTimelineCard({ sensor, range }: { sensor: Sensor; range: TimeRange }) {
+export function EventTimelineCard({ sensor, range, notifications, chain, onNotificationsChange }: {
+  sensor: Sensor; range: TimeRange; notifications: NotificationState | null;
+  chain: ConnectionChain; onNotificationsChange: (state: NotificationState) => void;
+}) {
   const [timeline, setTimeline] = useState<Timeline | null>(null);
   const [zoom, setZoom] = useState<WindowRange | null>(null);
   const [selection, setSelection] = useState<{ anchor: number; current: number } | null>(null);
@@ -72,6 +76,7 @@ export function EventTimelineCard({ sensor, range }: { sensor: Sensor; range: Ti
       <CardDescription>{visibleIntervals.length} events · {Math.round(totalMs / 60000)} active minutes{zoom ? " · Temporary zoom" : ""}{sensor.current ? ` · Last reading: ${new Date(sensor.current.updated_at).toLocaleString()}` : ""}</CardDescription>
     </CardHeader>
     <CardContent>
+      {sensor.kind === "door" && <DoorAlertControl sensor={sensor} state={notifications} chain={chain} onChange={onNotificationsChange} />}
       <div
         ref={timelineRef}
         className="relative h-12 touch-none select-none overflow-hidden rounded-md bg-muted cursor-crosshair"

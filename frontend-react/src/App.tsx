@@ -16,7 +16,7 @@ function initialRange(): TimeRange {
 export default function App() {
   const [range, setRangeState] = useState<TimeRange>(initialRange);
   const { theme, setTheme } = useTheme();
-  const { sensors, loading, error, chain } = useDashboardData();
+  const { sensors, loading, error, chain, notifications, setNotifications } = useDashboardData();
 
   function setRange(value: TimeRange) {
     localStorage.setItem("ha-web.time-range", value);
@@ -51,7 +51,7 @@ export default function App() {
         <section className="mt-8 space-y-4" aria-labelledby="events-heading">
           <h2 id="events-heading" className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Activity timelines</h2>
           <div className="grid gap-4 lg:grid-cols-2">
-            {sensors.filter((sensor) => sensor.card === "timeline").map((sensor) => <EventTimelineCard key={sensor.id} sensor={sensor} range={range} />)}
+            {sensors.filter((sensor) => sensor.card === "timeline").map((sensor) => <EventTimelineCard key={sensor.id} sensor={sensor} range={range} notifications={notifications} chain={chain} onNotificationsChange={setNotifications} />)}
           </div>
         </section>
       </>}

@@ -11,13 +11,16 @@ from fastapi.responses import JSONResponse
 from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 
-from app.catalog import build_zro_catalog, load_catalog
+from app.catalog import LOCATION_LABELS, build_zro_catalog, load_catalog
 from app.current_state import CurrentState, build_recovered_states
 from app.intervals import build_intervals, range_start
 from app.link_state import LinkState
 from app.publish_policy import is_allowed, load_allowlist
 from app.time_ranges import TimeRange, get_legacy_hours_spec, get_time_range_spec
 from app.zro_env import decode_env_message, normalize_device
+from app.notification_rules import NotificationStore
+from app.notifications import Notifications
+from app.telegram import TelegramSender
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +47,7 @@ link_state = LinkState()
 # esa diferencia es la que /api/health tiene que contar y la que el healthcheck
 # de Docker usa para decidir si el contenedor sirve para algo.
 mqtt_connected = False
+notification_task: asyncio.Task | None = None
 
 
 async def broadcast(message: dict):
@@ -139,7 +143,7 @@ def write_to_influx(topic: str, payload: str, timestamp: datetime | None = None)
             write_api.write(bucket=INFLUX_BUCKET, record=point.time(timestamp) if timestamp else point)
 
 
-async def handle_zro_env_message(topic: str, payload: str) -> bool:
+async def handle_zro_env_message(topic: str, payload: str, retained: bool = False) -> bool:
     if not topic.startswith("/ZRO/env/"):
         return False
     try:
@@ -151,6 +155,13 @@ async def handle_zro_env_message(topic: str, payload: str) -> bool:
     zro_devices.update(devices)
     for device, data in devices.items():
         for reading in normalize_device(device, data):
+            if reading.topic.endswith("/door") and isinstance(data.get("updated_at"), str):
+                sensor_id = f"{device.replace('-', '_')}_door"
+                notifications.store.observe(
+                    sensor_id, LOCATION_LABELS.get(device, device.replace("-", " ").title()),
+                    reading.payload, reading.updated_at.timestamp(), retained,
+                    datetime.now(timezone.utc).timestamp(),
+                )
             state = CurrentState(reading.payload, reading.updated_at, "zro-pi")
             previous = current_states.get(reading.topic)
             current_states[reading.topic] = state
@@ -181,6 +192,7 @@ async def mqtt_listener():
                 username=os.getenv("MQTT_USER"),
                 password=os.getenv("MQTT_PASSWORD"),
             ) as client:
+                notifications.store.reset_baselines()
                 await client.subscribe("#")
                 mqtt_connected = True
                 await broadcast(link_message())
@@ -192,9 +204,11 @@ async def mqtt_listener():
                     # camino hasta la Raspberry.
                     if link_state.handles(topic):
                         if link_state.apply(topic, payload):
+                            if not link_state.bridge_connected or link_state.pi_availability != "online":
+                                notifications.store.reset_baselines()
                             await broadcast(link_message())
                         continue
-                    if await handle_zro_env_message(topic, payload):
+                    if await handle_zro_env_message(topic, payload, bool(message.retain)):
                         continue
                     current_states[topic] = CurrentState(
                         payload=payload,
@@ -228,17 +242,33 @@ async def mqtt_listener():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global notification_task
     try:
         await asyncio.to_thread(recover_current_states)
     except Exception:
         logger.exception("Could not recover current states from InfluxDB")
+    notifications.store = NotificationStore(os.getenv("NOTIFICATION_DB_PATH", "/data/notifications.sqlite3"))
     task = asyncio.create_task(mqtt_listener())
-    yield
-    task.cancel()
-    influx_client.close()
+    notification_task = asyncio.create_task(notifications.run())
+    try:
+        yield
+    finally:
+        task.cancel()
+        notification_task.cancel()
+        await asyncio.gather(task, notification_task, return_exceptions=True)
+        notifications.store.close()
+        influx_client.close()
 
 
 app = FastAPI(lifespan=lifespan)
+notifications = Notifications(
+    None,
+    TelegramSender(os.getenv("TELEGRAM_BOT_TOKEN", ""), os.getenv("TELEGRAM_CHAT_ID", ""),
+                   os.getenv("NOTIFICATION_TIMEZONE", "Europe/Madrid")),
+    lambda: build_zro_catalog(zro_devices) if zro_devices else load_catalog(),
+    broadcast,
+)
+app.include_router(notifications.router)
 
 
 def ping_influx() -> bool:
@@ -253,19 +283,20 @@ def ping_influx() -> bool:
 async def health():
     """Salud real del backend, no "el proceso sigue en pie".
 
-    Solo tumban el contenedor las dos dependencias sin las cuales este servicio
-    no hace nada: el broker (no llegan datos) e InfluxDB (no se guardan ni se
-    consultan). El bridge y la Raspberry se informan pero NO devuelven 503:
+    Devuelve 503 si falla el broker, InfluxDB o el worker de notificaciones.
+    El bridge y la Raspberry se informan pero NO devuelven 503:
     reiniciar el backend no arregla un enlace roto en la otra punta, y hacerlo
     dejaría el dashboard caído además de sin datos nuevos.
     """
     influx_ok = await asyncio.to_thread(ping_influx)
-    healthy = mqtt_connected and influx_ok
+    notification_worker_ok = notification_task is not None and not notification_task.done()
+    healthy = mqtt_connected and influx_ok and notification_worker_ok
     return JSONResponse(
         {
             "status": "healthy" if healthy else "unhealthy",
             "mqtt_connected": mqtt_connected,
             "influxdb_connected": influx_ok,
+            "notification_worker_running": notification_worker_ok,
             **link_state.snapshot(),
             "topics": list(current_states.keys()),
         },
@@ -403,6 +434,7 @@ async def websocket_endpoint(ws: WebSocket):
     # El estado del enlace va primero: el cliente pinta la cadena de conexión
     # antes de tener un solo sensor.
     await ws.send_text(json.dumps(link_message()))
+    await ws.send_text(json.dumps({"type": "notification_rule", **notifications.snapshot()}))
     for topic, state in current_states.items():
         await ws.send_text(json.dumps({
             "type": "sensor",

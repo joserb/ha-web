@@ -58,6 +58,8 @@ services:
   backend:
     build: ./backend
     env_file: .env
+    volumes:
+      - notification-data:/data
     depends_on:
       mosquitto:
         condition: service_healthy
@@ -109,3 +111,4 @@ volumes:
   mosquitto-data:
   mosquitto-log:
   influxdb-data:
+  notification-data:

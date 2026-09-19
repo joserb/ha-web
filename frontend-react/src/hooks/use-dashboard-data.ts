@@ -1,3 +1,4 @@
+import type { NotificationState } from "@/components/door-alert-control";
 import { useEffect, useMemo, useState } from "react";
 import { fetchSensors } from "@/lib/api";
 import type { ConnectionChain, PiAvailability, Sensor } from "@/types/sensors";
@@ -17,7 +18,7 @@ interface LinkMessage {
   pi_availability: PiAvailability | null;
 }
 
-type SocketMessage = SensorMessage | LinkMessage;
+type SocketMessage = SensorMessage | LinkMessage | ({ type: "notification_rule" } & NotificationState);
 
 // Ages are recomputed from the real reading timestamp on this tick, so a dead
 // sensor keeps ageing while the tab is open.
@@ -42,6 +43,7 @@ function withAge(sensor: Sensor, now: number): Sensor {
 }
 
 export function useDashboardData() {
+  const [notifications, setNotifications] = useState<NotificationState | null>(null);
   const [sensors, setSensors] = useState<Sensor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +79,10 @@ export function useDashboardData() {
       socket.onopen = () => setChain((current) => ({ ...current, socket: "connected" }));
       socket.onmessage = (event) => {
         const message = JSON.parse(event.data) as SocketMessage;
+        if (message.type === "notification_rule") {
+          setNotifications(message);
+          return;
+        }
         if (message.type === "link") {
           setChain((current) => ({
             ...current,
@@ -119,5 +125,5 @@ export function useDashboardData() {
 
   const aged = useMemo(() => sensors.map((sensor) => withAge(sensor, now)), [sensors, now]);
 
-  return { sensors: aged, loading, error, chain };
+  return { sensors: aged, loading, error, chain, notifications, setNotifications };
 }
