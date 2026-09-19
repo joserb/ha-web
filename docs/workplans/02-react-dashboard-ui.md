@@ -1,10 +1,16 @@
 ---
 status: in-progress
 created: 2026-07-26
-updated: 2026-07-26
+updated: 2026-09-18
 ---
 
 # React dashboard UI and sensor visualizations
+
+## Estado contrastado con el código (2026-09-18)
+
+Compose sirve `frontend-react/` (React 19); `frontend/` es el prototipo conservado. La fuente actual es `zro-pi` por bridge MQTT y el histórico de Home Assistant mantiene compatibilidad. Acceso y arquitectura: [README](../../README.md).
+
+Ya existen tendencias por familia, ocultación de canales, API y tarjetas de intervalos, zoom de timelines, temas y rango persistentes, y pruebas unitarias de backend. Las consultas de tendencias siguen siendo individuales; faltan la consulta del estado anterior al rango, persistencia de canales, selector de familias y verificación completa de UI. Los apartados siguientes conservan el diseño objetivo; las casillas pendientes pueden agrupar una implementación parcial con validaciones aún pendientes. Esta revisión no comprueba el despliegue en vivo.
 
 ## Objective
 
@@ -183,7 +189,7 @@ src/
 
 - [ ] Add the batch trend API and typed frontend client.
 - [x] Port the useful Recharts conventions from `zro-dashboard`.
-- [ ] Implement stacked trend cards by compatible family.
+- [x] Implement stacked trend cards by compatible family.
 - [ ] Implement family and channel selectors with persisted choices.
 - [ ] Verify all ten time ranges and bounded point counts.
 

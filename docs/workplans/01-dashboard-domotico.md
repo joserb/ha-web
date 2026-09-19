@@ -1,13 +1,19 @@
 ---
 status: in-progress
 created: 2026-07-26
-updated: 2026-08-08
+updated: 2026-09-18
 ---
 
 # Dashboard doméstico: evolución de `ha-web`
 
 **Repositorio:** `ha-web`
 **Objetivo:** convertir el prototipo actual en un dashboard doméstico seguro, configurable, observable y accesible desde Tailscale o Internet.
+
+## Estado contrastado con el código (2026-09-18)
+
+Compose sirve `frontend-react/` (React 19); `frontend/` es el prototipo conservado. La fuente actual es `zro-pi` por bridge MQTT y el histórico de Home Assistant mantiene compatibilidad. Acceso y arquitectura: [README](../../README.md).
+
+Ya existen tendencias por familia, ocultación de canales, API y tarjetas de intervalos, zoom de timelines, temas y rango persistentes, y pruebas unitarias de backend. Las consultas de tendencias siguen siendo individuales; faltan la consulta del estado anterior al rango, persistencia de canales, selector de familias y verificación completa de UI. Los apartados siguientes conservan el diseño objetivo; las casillas pendientes pueden agrupar una implementación parcial con validaciones aún pendientes. Esta revisión no comprueba el despliegue en vivo.
 
 ## Contexto
 
@@ -19,7 +25,7 @@ El producto final debe mostrar valores actuales, tendencias multicanal e interva
 
 ### Arquitectura
 
-- Mantener Mosquitto, InfluxDB 2, FastAPI, Nginx y el frontend web modular.
+- Mantener Mosquitto, InfluxDB 2, FastAPI y Nginx, con el frontend React actual.
 - Nginx será el único punto de entrada desde Internet y terminará TLS.
 - MQTT, InfluxDB y FastAPI permanecerán en redes privadas de Docker o ligados a localhost/Tailscale.
 - Separar lectura de sensores y control de actuadores. El navegador no podrá publicar topics MQTT arbitrarios.
@@ -150,7 +156,7 @@ La migración detallada de interfaz, cards y visualizaciones se ejecuta mediante
 - [ ] Crear layout y registro común de cards.
 - [x] Implementar card `meter`.
 - [ ] Implementar card `timeline`.
-- [ ] Implementar sección de tendencias apiladas.
+- [x] Implementar sección de tendencias apiladas por familia.
 - [x] Añadir selector global `1h`–`forever`.
 - [ ] Añadir selector de familias y canales.
 - [ ] Persistir rango, familias, canales y layout.
@@ -228,3 +234,8 @@ La migración detallada de interfaz, cards y visualizaciones se ejecuta mediante
 - 2026-07-26: iniciado el bridge MQTT RPi → VPS mediante Tailscale para `/ZRO/env/#`.
 - 2026-07-26: bridge verificado con siete retained; iniciada la adaptación del contrato `zro-pi` al esquema histórico `home/{ubicación}/{medida}`.
 - 2026-07-26: adaptador desplegado; 16 canales frescos se descubren desde `zro-pi` y se escriben conservando continuidad con el histórico anterior de Home Assistant.
+
+
+## Ampliación planificada: cámara doméstica
+
+El origen RTSP de la EZVIZ C6N ya está verificado. La implementación de una tarjeta de vídeo bajo demanda se define en [05-camera-dashboard-widget.md](05-camera-dashboard-widget.md), con [evaluación y evidencia](04-camera-viewer-feasibility.md). Pasarela y widget siguen pendientes; el vídeo tendrá un flujo independiente de la ingesta de sensores.
