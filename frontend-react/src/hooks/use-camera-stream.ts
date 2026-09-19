@@ -156,7 +156,10 @@ export function useCameraStream(path: string) {
       const message = JSON.parse(event.data) as { type: string; value?: string };
       // The gateway reports a missing or unreachable source this way; without
       // it the socket would just sit open and time out with no explanation.
-      if (message.type === "error") return fail(message.value ?? "Camera gateway error");
+      // Its text is deliberately dropped: it carries server-side detail such
+      // as the camera's LAN address and port ("dial tcp 192.168.1.199:554"),
+      // which has no place in a browser. The detail stays in the gateway log.
+      if (message.type === "error") return fail("The gateway could not reach the camera");
       if (message.type !== "mse" || !message.value) return;
       const mime = message.value;
       const addBuffer = () => {

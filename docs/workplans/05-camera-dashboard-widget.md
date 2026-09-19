@@ -198,3 +198,22 @@ Comprobado desde la propia Pi y desde `charo-vps` por Tailscale: `/api/ws` respo
 `192.168.1.199` responde a ARP con MAC `20:bb:bc:69:d8:f8` (Hangzhou Ezviz), o sea que está en la red, pero no responde a ICMP y tiene cerrados 80, 443, 554, 8000, 8554 y 8080. Es el cuadro de una cámara en modo privacidad/suspensión o con RTSP desactivado tras un reinicio, el riesgo que este plan ya anotaba sin verificar. Queda pendiente despertarla y reactivar RTSP desde la aplicación EZVIZ.
 
 La configuración desplegada lleva todavía el marcador `USUARIO:CONTRASENA`: las credenciales no estaban disponibles en esta sesión. Sin ellas y sin cámara accesible no se ha podido reproducir vídeo, medir bitrate ni consumo, ni activar la tarjeta en el VPS.
+
+
+## Despliegue en el VPS (2026-09-19)
+
+`charo-vps` actualizado al commit del visor. El árbol de trabajo tenía los cambios de Telegram sin commitear; se comprobó fichero a fichero que su contenido coincidía con lo ya publicado antes de descartarlo. Respaldo previo en `/opt/projects/ha-web-backups/camera-20260919/source-before.tgz`, `.env` en `.env.before-camera-20260919` e imagen anterior etiquetada `ha-web-nginx:before-camera-20260919`.
+
+`CAMERA_ENABLED=true` y `CAMERA_GATEWAY_HOSTPORT=100.120.246.118:1984`. Cambiar el `.env` recrea también backend e InfluxDB, porque comparten `env_file`; los cuatro contenedores volvieron a `healthy` y `/api/health` sigue informando bridge y Pi en línea, con el worker de notificaciones activo.
+
+Verificado en el VPS:
+
+- `nginx -t` correcto y plantilla sustituida: `set $args src=home_camera;` y `proxy_pass` a la IP Tailscale de la Pi.
+- `/camera/config.json` devuelve `{"enabled": true}`.
+- Handshake WebSocket a `/camera/home/ws`: 101 Switching Protocols.
+- Un cliente que no envía `src` obtiene igualmente el stream configurado, lo que confirma que la fuente se fija en el servidor. Las rutas `/camera/api` y `/camera/api/streams` caen en el `try_files` del SPA y devuelven el `index.html`, no la API de la pasarela.
+- Petición MSE completa: la pasarela responde `{"type":"error","value":"mse: streams: dial tcp 192.168.1.199:554: i/o timeout"}`, es decir, toda la cadena navegador → Nginx → Tailscale → go2rtc → cámara funciona y solo falta la cámara.
+
+Esa respuesta destapó una fuga: el widget mostraba el texto del error tal cual, con la IP y el puerto internos de la cámara. El plan ya lo prohibía. Ahora el reproductor descarta el texto de la pasarela y muestra un mensaje genérico; el detalle queda en el log de go2rtc.
+
+Sigue pendiente: credenciales RTSP reales en `~/camera-gateway/go2rtc.yaml` de la Pi, despertar la cámara y reactivar RTSP, y después reproducción real, medidas y pruebas en navegadores.
