@@ -1,0 +1,68 @@
+# Plantilla: el contenedor la procesa con envsubst al arrancar
+# (/etc/nginx/templates → /etc/nginx/conf.d). Solo se sustituyen las variables
+# CAMERA_*, filtradas con NGINX_ENVSUBST_FILTER, para que las variables propias
+# de nginx ($host, $args, $http_upgrade…) lleguen intactas.
+
+server {
+    listen 80;
+
+    location /assets/ {
+        root /usr/share/nginx/html;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+    }
+
+    location / {
+        root /usr/share/nginx/html;
+        try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-store" always;
+    }
+
+    location /api/ {
+        proxy_pass http://backend:8000/api/;
+        proxy_set_header Host $http_host;
+    }
+
+    location /ws {
+        proxy_pass http://backend:8000/ws;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    # Interruptor de despliegue de la cámara. El dashboard lo consulta al
+    # cargar; con `false` no llega a montar la tarjeta y no existe ninguna
+    # conexión de vídeo. Cuesta una petición mínima y evita dejar una tarjeta
+    # rota en producción mientras la pasarela de la Pi no está lista.
+    location = /camera/config.json {
+        default_type application/json;
+        add_header Cache-Control "no-store" always;
+        return 200 '{"enabled": ${CAMERA_ENABLED}}';
+    }
+
+    # Reproducción de la cámara: WebSocket hacia go2rtc en la Raspberry.
+    #
+    # `set $args` descarta la query del navegador y fija la fuente en el
+    # servidor. No es cosmético: el manejador `mse` de go2rtc construye el
+    # stream desde los parámetros de la petición, así que un `?src=` libre
+    # permitiría reproducir orígenes arbitrarios desde esta ruta.
+    #
+    # La coincidencia exacta (`= /camera/home/ws`) deja fuera el resto de la
+    # API de la pasarela; `allow_paths` en go2rtc lo vuelve a impedir del lado
+    # de la Pi.
+    location = /camera/home/ws {
+        set $args src=home_camera;
+        proxy_pass http://${CAMERA_GATEWAY_HOSTPORT}/api/ws;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        # go2rtc comprueba que Origin y Host coincidan: reenviar el Host del
+        # dashboard es lo que hace que esa comprobación sea útil en vez de
+        # comparar contra el nombre interno del proxy.
+        proxy_set_header Host $http_host;
+        # Un directo no tiene fin: sin esto nginx corta a los 60 s.
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+        # El vídeo debe salir según llega, no cuando se llene un búfer.
+        proxy_buffering off;
+    }
+}

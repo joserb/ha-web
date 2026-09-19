@@ -49,3 +49,19 @@ El backend mantiene las reglas y la cola Telegram en el volumen Compose `notific
 Los avisos usan `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` del `.env`, compartidos con el vigilante. La presencia de ambas variables habilita el control; la entrega real requiere además que el bot tenga acceso al chat. Los errores se muestran en la tarjeta sin revelar credenciales.
 
 Despliegue del 2026-09-18: fuentes anteriores guardadas en `/opt/projects/ha-web-backups/telegram-20260918/source-before.tgz`; imágenes anteriores `ha-web-backend:before-telegram-20260918` y `ha-web-nginx:before-telegram-20260918`. El rollback puede restaurar estas fuentes e imágenes conservando todos los volúmenes. El frontend anterior no muestra el control; desactivar cualquier regla activa antes de volver a la versión anterior.
+
+
+## Pasarela de cámara
+
+La pasarela go2rtc corre en `pihomeblk-1`, no en el VPS: `camera-gateway/` tiene su propio Compose y su [guía de despliegue](../camera-gateway/README.md). Detenerla o recrearla no toca zro-pi, Zigbee2MQTT, Mosquitto, InfluxDB ni el backend.
+
+En el VPS, la ruta de vídeo depende de dos variables del `.env`: `CAMERA_ENABLED` y `CAMERA_GATEWAY_HOSTPORT`. Se aplican al recrear el contenedor `nginx` (`docker compose up -d nginx`), porque la plantilla se procesa con envsubst al arrancar. Con `CAMERA_ENABLED=false`, `/camera/config.json` devuelve `{"enabled": false}`, el dashboard no monta la tarjeta y la ruta de reproducción apunta a un destino inexistente: es el estado de reversión y también el valor por defecto.
+
+`/camera/home/ws` no atraviesa FastAPI, así que una pasarela caída no afecta a `/api/health` ni al vigilante del stack. Al revés también: el vídeo sigue disponible aunque falle la API de sensores.
+
+Comprobar desde el VPS que solo la ruta de reproducción está expuesta, sustituyendo la IP Tailscale de la Pi:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' http://IP_PI:1984/api/streams   # 404 esperado
+curl -s -o /dev/null -w '%{http_code}\n' http://IP_PI:1984/api/ws        # 400 esperado
+```

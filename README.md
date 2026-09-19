@@ -77,8 +77,19 @@ npm --prefix frontend-react run build
 ```
 
 
-## Cámara doméstica: conexión verificada, widget planificado
+## Cámara doméstica
 
-La EZVIZ C6N está en `192.168.1.199`. Se ha verificado desde la Raspberry el acceso RTSP autenticado por TCP: vídeo H.264 a 1920 × 1080 y audio AAC mono a 16 kHz. Las credenciales no están guardadas en el repositorio.
+La EZVIZ C6N está en `192.168.1.199`. Desde la Raspberry se ha verificado el acceso RTSP autenticado por TCP: vídeo H.264 a 1920 × 1080 y audio AAC mono a 16 kHz. Las credenciales no están en el repositorio.
 
-El [plan del widget](docs/workplans/05-camera-dashboard-widget.md) propone una tarjeta **Home camera** con **View live**, parada, pantalla completa y audio silenciado inicialmente. El vídeo se abrirá bajo demanda mediante go2rtc en la Pi y el proxy del VPS por Tailscale. **La pasarela y el widget todavía no están implementados.**
+La tarjeta **Home camera** aparece bajo **Camera**, al final del dashboard. Muestra «Ready to connect» y no abre ninguna conexión de vídeo hasta pulsar **View live**. La marca **LIVE** solo aparece mientras la reproducción avanza: una imagen congelada pasa a reconexión o error en unos diez segundos. **Stop** cierra la sesión; ocultar la pestaña o dejar la tarjeta fuera de pantalla más de tres segundos la detiene y ofrece **Resume live**. El audio empieza silenciado.
+
+El vídeo no pasa por FastAPI, MQTT ni InfluxDB: el navegador abre `/camera/home/ws` en el mismo origen, Nginx lo reenvía a go2rtc en `pihomeblk-1` por Tailscale y la pasarela entrega fMP4 sobre WebSocket para MSE. La fuente se fija en el servidor; la query del navegador se descarta. Nada se graba.
+
+Despliegue en dos partes:
+
+1. Pasarela en la Raspberry: [`camera-gateway/`](camera-gateway/README.md). Lleva su propio Compose, su `go2rtc.yaml` local con la URL RTSP autenticada y publica el puerto solo en la IP Tailscale de la Pi.
+2. Dashboard en el VPS: `CAMERA_ENABLED=true` y `CAMERA_GATEWAY_HOSTPORT=<IP Tailscale de la Pi>:1984` en el `.env`, y recrear el contenedor `nginx`.
+
+Con `CAMERA_ENABLED=false` (valor por defecto) la tarjeta no se monta y la ruta de vídeo no lleva a ningún sitio. La cámara funciona aunque falle la API de sensores, y los sensores y avisos siguen funcionando aunque falle la cámara.
+
+**Pendiente de verificación real:** reproducción en los navegadores objetivo, latencia, bitrate y consumo en la Pi. Hasta medirlos, el interruptor debe seguir apagado en producción. Detalle y criterios: [plan del widget](docs/workplans/05-camera-dashboard-widget.md).

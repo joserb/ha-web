@@ -88,6 +88,7 @@ Guía de entrada y acceso: [README.md](README.md).
 - Timelines de puerta y vibración con zoom, actualización por WebSocket e intervalos de anchura visual mínima de 6 px.
 - Selector global de rango y temas `System`/`Light`/`Dark`, con persistencia local.
 - Estado visible de la cadena navegador → backend → broker → bridge → Pi.
+- Tarjeta `Home camera` bajo demanda, independiente del estado de la API de sensores.
 - `frontend/` y `nginx/default.conf` conservan el prototipo estático anterior; Compose ya no lo sirve.
 
 ## Configuración sensible
@@ -137,12 +138,18 @@ Sintaxis del remapeo: [documentación de Mosquitto](https://mosquitto.org/man/mo
 - La prueba de apertura física y entrega Telegram real queda a cargo de una activación explícita del usuario; los tests automáticos simulan Telegram.
 
 
-## Cámara EZVIZ C6N: estado y siguiente entrega
+## Cámara EZVIZ C6N: pasarela y widget implementados (2026-09-19)
 
-- IP confirmada: `192.168.1.199`, RTSP/TCP en 554, ruta `/`, autenticación verificada desde `pihomeblk-1`.
-- Vídeo H.264 1920 × 1080; audio AAC, 16 kHz, mono. No se guardaron imágenes en las pruebas.
+- IP confirmada: `192.168.1.199`, RTSP/TCP en 554, ruta `/`, autenticación verificada desde `pihomeblk-1`. Vídeo H.264 1920 × 1080; audio AAC 16 kHz mono.
 - Las IP y fallos anteriores de cámara son diagnóstico histórico; no usarlos como configuración actual.
-- Credenciales facilitadas en la sesión: configurar como secreto local durante la implementación, nunca en Git o frontend.
-- Plan: go2rtc independiente en la Pi, reproducción MSE/fMP4 por una ruta del Nginx del VPS y tarjeta React bajo demanda. Sin dependencia de Home Assistant ni transporte de vídeo por MQTT/FastAPI.
-- La sección Camera debe funcionar independientemente de errores en la carga de sensores.
-- Pasarela, proxy y widget todavía pendientes. Plan ejecutable: [05-camera-dashboard-widget.md](docs/workplans/05-camera-dashboard-widget.md); evidencia: [04-camera-viewer-feasibility.md](docs/workplans/04-camera-viewer-feasibility.md).
+- Credenciales: solo en `camera-gateway/go2rtc.yaml` del host, fuera de Git y nunca en el frontend.
+- `camera-gateway/` contiene el Compose de go2rtc **1.9.14** para desplegar en la Raspberry como proyecto independiente, más plantillas sin secretos.
+- go2rtc queda reducido a lo imprescindible: `modules: [api, ws, rtsp, mp4]`, `allow_paths: [/api/ws]`, servidor RTSP y WebRTC desactivados, puerto publicado solo en la IP Tailscale de la Pi.
+- El navegador conecta a `/camera/home/ws` en su mismo origen. Nginx fija `src=home_camera` con `set $args` y descarta la query del cliente: el manejador `mse` construye el stream desde los parámetros de la petición, así que un `src` libre permitiría reproducir orígenes arbitrarios.
+- El transporte es fMP4 sobre WebSocket reproducido con MSE. No pasa por FastAPI, MQTT ni InfluxDB, y no se graba nada.
+- `frontend-react/nginx.conf.template` se procesa con envsubst al arrancar el contenedor; `NGINX_ENVSUBST_FILTER=^CAMERA_` protege las variables propias de nginx.
+- Interruptor de despliegue: `CAMERA_ENABLED` (por defecto `false`) y `CAMERA_GATEWAY_HOSTPORT` en el `.env` del VPS. Apagado, la tarjeta no se monta y la ruta no tiene destino.
+- La tarjeta se renderiza fuera de la condición que oculta el dashboard cuando falla la API de sensores.
+- `LIVE` solo mientras la reproducción avanza; congelación de ~10 s, tres reintentos (1, 3 y 5 s) y después Retry manual. Pestaña oculta o tarjeta fuera de vista más de 3 s detienen el vídeo y ofrecen Resume.
+- **Pendiente**: desplegar la pasarela en la Pi, reproducir en navegadores reales, medir latencia, bitrate y consumo, y comprobar el aislamiento del proxy contra rutas y `src` no permitidos. Hasta entonces el interruptor sigue apagado.
+- Plan y criterios de aceptación: [05-camera-dashboard-widget.md](docs/workplans/05-camera-dashboard-widget.md); evidencia: [04-camera-viewer-feasibility.md](docs/workplans/04-camera-viewer-feasibility.md).

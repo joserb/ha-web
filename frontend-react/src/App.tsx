@@ -3,6 +3,7 @@ import { DashboardHeader } from "@/components/dashboard-header";
 import { TemperatureMeterCard } from "@/components/temperature-meter-card";
 import { TrendCard } from "@/components/trend-card";
 import { EventTimelineCard } from "@/components/event-timeline-card";
+import { CameraCard } from "@/components/camera-card";
 import { useDashboardData } from "@/hooks/use-dashboard-data";
 import { useTheme } from "@/hooks/use-theme";
 import type { TimeRange } from "@/lib/ranges";
@@ -55,6 +56,9 @@ export default function App() {
           </div>
         </section>
       </>}
+      {/* Outside the sensor gate on purpose: a camera is still useful when the
+          sensor API is down, and its own failures stay inside the card. */}
+      <CameraCard />
     </main>
   );
 }

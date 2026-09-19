@@ -87,6 +87,17 @@ services:
 
   nginx:
     build: ./frontend-react
+    environment:
+      # El contenedor procesa nginx.conf.template con envsubst al arrancar. El
+      # filtro evita que se sustituyan las variables propias de nginx: sin él,
+      # cualquier variable de entorno homónima ($host, $uri…) vaciaría la
+      # directiva correspondiente.
+      NGINX_ENVSUBST_FILTER: "^CAMERA_"
+      # Interruptor de despliegue de la cámara. Por defecto apagado: el
+      # dashboard no muestra la tarjeta y la ruta de vídeo no lleva a ningún
+      # sitio mientras la pasarela de la Raspberry no esté verificada.
+      CAMERA_ENABLED: "${CAMERA_ENABLED:-false}"
+      CAMERA_GATEWAY_HOSTPORT: "${CAMERA_GATEWAY_HOSTPORT:-127.0.0.1:1}"
     depends_on:
       backend:
         condition: service_healthy

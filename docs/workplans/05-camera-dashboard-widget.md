@@ -1,7 +1,7 @@
 ---
-status: planned
+status: in-progress
 created: 2026-09-18
-updated: 2026-09-18
+updated: 2026-09-19
 ---
 
 # Widget de acceso a la cámara en el dashboard
@@ -10,7 +10,7 @@ updated: 2026-09-18
 
 Añadir al dashboard una tarjeta de vídeo en directo de la EZVIZ C6N de casa, accesible desde los mismos dispositivos conectados a Tailscale que ya usan ha-web. Al pulsar «View live», se abre el stream; al detenerlo, se liberan las conexiones. El resto del dashboard debe seguir funcionando aunque la cámara esté apagada.
 
-Este documento planifica la implementación. No se han instalado servicios de vídeo ni modificado el dashboard para mostrar la cámara.
+Este documento planifica la implementación. El código de la pasarela, el proxy y el widget está escrito (2026-09-19); falta desplegar en la Raspberry y verificar con la cámara real. Ver [Implementación](#implementación-2026-09-19) al final.
 
 ## Base verificada
 
@@ -107,17 +107,17 @@ La integración debe estar tras una opción de despliegue que permita ocultar/de
 
 - [x] Confirmar IP, autenticación RTSP y códecs.
 - [ ] Registrar configuración actual de la cámara y firmware sin revelar secretos.
-- [ ] Preparar las plantillas y seleccionar versión concreta de go2rtc.
+- [x] Preparar las plantillas y seleccionar versión concreta de go2rtc (1.9.14).
 - [ ] Desplegar la pasarela aislada en la Pi y validar el enlace de reproducción desde el VPS.
 - [ ] Reproducir H.264/AAC en una página mínima de prueba, primero silenciada.
 - [ ] Medir arranque, bitrate, CPU, memoria y cierre de stream; comprobar que no aparece recodificación inesperada.
 
 ### 2. Proxy y widget
 
-- [ ] Implementar y validar la restricción de fuente/endpoints/mensajes de reproducción.
-- [ ] Añadir la ruta Nginx y el adaptador de reproductor.
-- [ ] Crear la tarjeta con View live, Stop, Fullscreen y audio opcional.
-- [ ] Implementar estados, detección de congelación, reintentos limitados y liberación de recursos.
+- [ ] Implementar y validar la restricción de fuente/endpoints/mensajes de reproducción. Implementada; la validación contra el servicio real sigue pendiente.
+- [x] Añadir la ruta Nginx y el adaptador de reproductor.
+- [x] Crear la tarjeta con View live, Stop, Fullscreen y audio opcional.
+- [x] Implementar estados, detección de congelación, reintentos limitados y liberación de recursos.
 - [ ] Verificar temas, teclado, etiquetas accesibles y comportamiento móvil.
 
 ### 3. Verificación y entrega
@@ -150,3 +150,32 @@ Si falla el despliegue, desactivar la función y restaurar frontend/Nginx anteri
 ## Fuera de alcance inicial
 
 Grabación, reproducción histórica, detección de movimiento, PTZ, micrófono de retorno, snapshots por Telegram, acceso público y mosaico multicámara. No se cambiará firmware ni se reseteará la cámara para implementar el widget.
+
+
+## Implementación (2026-09-19)
+
+Escrita a partir del código de go2rtc **1.9.14**, no de su documentación: el manejador `mse` construye el stream con `streams.GetOrPatch(tr.Request.URL.Query())`, es decir, desde los parámetros de la petición HTTP. Un `src` libre en esa ruta permitiría reproducir orígenes arbitrarios, así que Nginx lo fija con `set $args src=home_camera;` y descarta la query del navegador. Es la razón concreta de que el proxy no sea un `proxy_pass` genérico.
+
+Superficie reducida en la pasarela: `modules: [api, ws, rtsp, mp4]` deja registrados solo los manejadores `mse` y `mp4` y descarta `exec`, `echo`, `ffmpeg`, `hass` y el resto de orígenes; `allow_paths: [/api/ws]` convierte en 404 la interfaz web, `/api/config` y `/api/streams`, que devuelve la URL de origen. `rtsp: listen: ""` conserva el cliente RTSP y no levanta servidor —comprobado en `internal/rtsp/rtsp.go`—, y `webrtc: listen: ""` evita puertos UDP. `api.origin` vacío exige que Origin y Host coincidan, lo que funciona porque el proxy reenvía el Host del dashboard.
+
+Ficheros: `camera-gateway/` (Compose, plantillas y guía de despliegue), `frontend-react/nginx.conf.template` procesado con envsubst y `NGINX_ENVSUBST_FILTER=^CAMERA_`, `frontend-react/src/hooks/use-camera-stream.ts` y `frontend-react/src/components/camera-card.tsx`, montada en `App.tsx` fuera de la condición de error de sensores.
+
+No se ha incorporado el reproductor de go2rtc: el adaptador MSE es propio, unas 200 líneas, y evita vendorizar código con su licencia y su ciclo de versiones. Anuncia la misma lista de códecs filtrada por `MediaSource.isTypeSupported`.
+
+Interruptor de despliegue: `CAMERA_ENABLED` y `CAMERA_GATEWAY_HOSTPORT` en el `.env` del VPS, con `false` por defecto. El dashboard consulta `/camera/config.json` al cargar y, apagado, no monta la tarjeta.
+
+Verificado en local: `npm run typecheck` y `npm run build` correctos; la plantilla de Nginx se sustituye dejando intactas las variables propias de nginx. No se ha ejecutado `nginx -t` ni se ha reproducido vídeo: eso pertenece al despliegue.
+
+### Decisiones tomadas sobre el plan
+
+- Parada automática: pestaña oculta e `IntersectionObserver` con 3 s de gracia, ambas exigiendo **Resume live**. Sin reanudación automática.
+- La detección de congelación muestrea `currentTime` cada 2 s y exige 10 s sin avance; el plazo de conexión es de 10 s sin primer fotograma.
+- Reintentos 1, 3 y 5 s; después, Retry manual. Un contador de sesión invalida sockets, temporizadores y callbacks anteriores para que una conexión vieja no se apodere del reproductor.
+- Se recorta el búfer por encima de 30 s y se salta al directo si la reproducción se queda más de 5 s atrás.
+
+### Pendiente antes de activar en producción
+
+- Desplegar `camera-gateway/` en la Pi y comprobar `docker compose ps`, logs y apertura/cierre del RTSP bajo demanda.
+- `nginx -t` y reproducción real desde escritorio y móvil por Tailscale; medir arranque, bitrate, CPU y memoria.
+- Comprobar que `/api/streams`, `/api/config` y la interfaz web responden 404, y que un `src` alterado desde el navegador no cambia la fuente.
+- Pruebas automatizadas del ciclo de vida del reproductor con transporte simulado: el frontend todavía no tiene runner de pruebas, así que añadirlo es una decisión pendiente.

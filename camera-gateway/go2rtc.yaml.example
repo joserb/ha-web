@@ -1,0 +1,47 @@
+# Plantilla de configuración de la pasarela. Copiar a `go2rtc.yaml`, sustituir
+# los marcadores y restringir permisos (`chmod 600`). El fichero real queda
+# fuera de Git: contiene la URL RTSP con credenciales.
+
+streams:
+  # Identificador estable que fija el Nginx del VPS. El navegador nunca envía
+  # el nombre de la fuente, así que cambiarlo aquí obliga a cambiarlo también
+  # en `frontend-react/nginx.conf.template`.
+  home_camera:
+    # EZVIZ C6N verificada en 192.168.1.199:554, ruta `/`, RTSP sobre TCP.
+    # H.264 1920x1080 y AAC 16 kHz mono: se reenvían tal cual, sin recodificar.
+    - rtsp://USUARIO:CONTRASENA@192.168.1.199:554/
+    # Si la cámara negocia mal el canal de retorno de audio, probar:
+    #   - rtsp://USUARIO:CONTRASENA@192.168.1.199:554/#backchannel=0
+
+app:
+  # Solo los módulos que hacen falta para reproducir MSE/fMP4:
+  #   api  -> servidor HTTP        ws   -> endpoint /api/ws
+  #   rtsp -> cliente RTSP         mp4  -> manejadores `mse` y `mp4`
+  # Fuera quedan exec, echo, ffmpeg, hass, onvif y el resto de orígenes: son
+  # la vía por la que una API expuesta se convierte en ejecución de comandos.
+  modules: [api, ws, rtsp, mp4]
+
+api:
+  # Dentro del contenedor escucha en todas las interfaces; quien restringe el
+  # alcance es el binding a la IP Tailscale en compose.yml.
+  listen: ":1984"
+  # Única ruta registrada. Sin ella quedarían accesibles la interfaz web, el
+  # editor de configuración, /api/config y /api/streams (que revela la URL de
+  # origen). Con la lista puesta, todo lo demás devuelve 404.
+  allow_paths: [/api/ws]
+  # Vacío = comprobación de mismo origen. El Nginx del VPS reenvía el Host
+  # original del dashboard, de modo que Origin y Host coinciden y una página
+  # de terceros no puede abrir este WebSocket.
+  origin: ""
+
+rtsp:
+  # Cliente RTSP sí, servidor RTSP no: nadie necesita reexponer la cámara.
+  listen: ""
+
+webrtc:
+  # Esta entrega usa MSE sobre el proxy HTTP. Sin puertos UDP abiertos.
+  listen: ""
+
+log:
+  level: info
+  # `api: trace` registraría cada petición; útil solo al depurar el proxy.

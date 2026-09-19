@@ -1,0 +1,48 @@
+# Pasarela de vídeo de la cámara doméstica (EZVIZ C6N).
+#
+# Se despliega en la Raspberry `pihomeblk-1` como proyecto Compose
+# INDEPENDIENTE del stack de ha-web y del servicio zro-pi: reiniciar o parar
+# la cámara no puede tocar la ingesta de sensores ni Zigbee2MQTT.
+#
+#   cd /opt/projects/ha-web/camera-gateway
+#   cp .env.example .env && cp go2rtc.yaml.example go2rtc.yaml
+#   # editar ambos con la IP Tailscale de la Pi y la URL RTSP autenticada
+#   chmod 600 go2rtc.yaml
+#   docker compose up -d
+
+services:
+  go2rtc:
+    # Versión fijada: el protocolo WebSocket/MSE y la superficie de la API que
+    # asume el dashboard se verificaron contra esta etiqueta.
+    # Digest arm64 de 1.9.14: sha256:5644b2c8861da33ff6dadb75d9f9a3069611b59c4b5ccbdbae7f05ccf54d0f3c
+    image: alexxit/go2rtc:1.9.14
+    container_name: ha-web-camera-gateway
+    volumes:
+      # Solo lectura: la configuración lleva la URL RTSP con credenciales y no
+      # debe poder reescribirse desde el contenedor ni desde la interfaz web.
+      - ./go2rtc.yaml:/config/go2rtc.yaml:ro
+    ports:
+      # Solo la IP Tailscale de la Pi. Docker publica saltándose ufw, así que
+      # el binding es la restricción efectiva: sin 0.0.0.0 no hay LAN ni
+      # Internet. Limitar además el acceso al VPS con ACL de Tailscale.
+      - "${GATEWAY_BIND_IP:?Define GATEWAY_BIND_IP en .env}:1984:1984"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      # La imagen trae curl. Sin -f a propósito: con `allow_paths` restringido
+      # cualquier respuesta HTTP (incluido el 400 del upgrade fallido) prueba
+      # que el proceso sirve; curl solo falla si el puerto no acepta conexión.
+      # Una cámara apagada NO debe marcar la pasarela como enferma.
+      test: ["CMD-SHELL", "curl -s -o /dev/null -m 5 http://127.0.0.1:1984/api/ws || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
