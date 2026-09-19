@@ -47,6 +47,7 @@ Quedan pendientes consultas multicanal por lotes, detalles de intervalos al inic
 - [Plan general](docs/workplans/01-dashboard-domotico.md)
 - [Plan de interfaz React](docs/workplans/02-react-dashboard-ui.md)
 - [Plan de avisos temporales por Telegram](docs/workplans/03-telegram-door-alerts.md)
+- [Plan del log de eventos en timelines](docs/workplans/06-timeline-event-log.md)
 - [Viabilidad del visor de cámara](docs/workplans/04-camera-viewer-feasibility.md)
 - [Plan del widget de cámara](docs/workplans/05-camera-dashboard-widget.md)
 
