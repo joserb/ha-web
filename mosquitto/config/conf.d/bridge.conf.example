@@ -18,11 +18,13 @@ notifications_local_only true
 # cuando importa). Payload retenido `1` (arriba) / `0` (abajo).
 notification_topic /ZRO/bridge/state
 
+# zro-pi publica zro/... desde septiembre de 2026. El bridge traduce
+# el prefijo remoto zro/ al prefijo local /ZRO/ que consume ha-web.
 # Solo se replica telemetría normalizada desde la Raspberry al VPS.
-topic /ZRO/env/# in 0
+topic env/# in 1 /ZRO/ zro/
 
 # Last will retenida del servicio zro-pi (`online` / `offline`). Cubre el caso
 # que la notificación anterior no ve: bridge arriba pero el servicio de la Pi
 # muerto. QoS 1 porque con QoS 0 el bridge no conserva el flag de retenido y el
 # estado solo se conocería tras la siguiente transición.
-topic /ZRO/pi/availability in 1
+topic pi/availability in 1 /ZRO/ zro/
