@@ -10,6 +10,21 @@ class CurrentState:
     source: str
 
 
+def supersedes(previous: "CurrentState | None", updated_at: datetime) -> bool:
+    """¿Esta lectura debe reemplazar al estado actual?
+
+    Solo si es estrictamente más reciente. Al reconectar, el broker reproduce
+    los retenidos: traen la última lectura que él guardó, no la última que
+    ocurrió. Aceptarlos hacía retroceder el estado actual y pintaba como
+    obsoleto un sensor que acababa de reportar, además de deshacer la
+    recuperación desde InfluxDB que se hace al arrancar.
+
+    Misma marca de tiempo tampoco reemplaza: el mismo instante llega dos veces
+    —por topic individual y por el inventario agregado— y no aporta nada nuevo.
+    """
+    return previous is None or updated_at > previous.updated_at
+
+
 def build_recovered_states(rows: list[dict]) -> dict[str, CurrentState]:
     grouped: dict[str, dict] = {}
     for row in rows:

@@ -12,7 +12,7 @@ from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 
 from app.catalog import EVENT_KINDS, LOCATION_LABELS, build_zro_catalog, load_catalog
-from app.current_state import CurrentState, build_recovered_states
+from app.current_state import CurrentState, build_recovered_states, supersedes
 from app.intervals import build_intervals, range_start
 from app.link_state import LinkState
 from app.publish_policy import is_allowed, load_allowlist
@@ -162,16 +162,15 @@ async def handle_zro_env_message(topic: str, payload: str, retained: bool = Fals
                     reading.payload, reading.updated_at.timestamp(), retained,
                     datetime.now(timezone.utc).timestamp(),
                 )
-            state = CurrentState(reading.payload, reading.updated_at, "zro-pi")
-            previous = current_states.get(reading.topic)
-            current_states[reading.topic] = state
-            if previous is None or previous.updated_at != reading.updated_at:
-                await asyncio.to_thread(
-                    write_to_influx,
-                    reading.topic,
-                    reading.payload,
-                    reading.updated_at,
-                )
+            if not supersedes(current_states.get(reading.topic), reading.updated_at):
+                continue
+            current_states[reading.topic] = CurrentState(reading.payload, reading.updated_at, "zro-pi")
+            await asyncio.to_thread(
+                write_to_influx,
+                reading.topic,
+                reading.payload,
+                reading.updated_at,
+            )
             await broadcast({
                 "type": "sensor",
                 "topic": reading.topic,
