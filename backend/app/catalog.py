@@ -23,6 +23,11 @@ DEFAULT_EVENT_STALE_AFTER_SECONDS = 86400
 MAX_STALE_AFTER_SECONDS = 31_536_000
 # Sensores cuyo silencio es información, no avería.
 EVENT_KINDS = frozenset({"door", "vibration"})
+# El umbral lo marca el dispositivo, no la medida: la batería de un sensor de
+# puerta llega dentro de los mismos mensajes que la puerta, así que hereda su
+# cadencia. Medirla con el umbral de un termómetro la pintaba obsoleta cada
+# vez que la casa pasaba una hora tranquila.
+EVENT_DEVICE_TYPES = frozenset({"contact", "vibration"})
 
 
 def _stale_seconds(variable: str, default: int) -> int:
@@ -140,6 +145,7 @@ def build_zro_catalog(devices: dict[str, dict]) -> SensorCatalog:
     for device, state in sorted(devices.items()):
         location = f"home/{device}"
         location_label = LOCATION_LABELS.get(device, device.replace("-", " ").title())
+        device_limit = event_limit if state.get("type") in EVENT_DEVICE_TYPES else stale_limit
         for source, definition in METRIC_DEFINITIONS.items():
             value = state.get(source)
             if not isinstance(value, (int, float)) or isinstance(value, bool):
@@ -151,7 +157,7 @@ def build_zro_catalog(devices: dict[str, dict]) -> SensorCatalog:
                 "location": location,
                 "location_label": location_label,
                 **definition,
-                "stale_after_seconds": stale_limit,
+                "stale_after_seconds": device_limit,
             })
         if state.get("type") == "contact":
             sensors.append({
@@ -164,7 +170,7 @@ def build_zro_catalog(devices: dict[str, dict]) -> SensorCatalog:
                 "family": "doors",
                 "kind": "door",
                 "card": "timeline",
-                "stale_after_seconds": event_limit,
+                "stale_after_seconds": device_limit,
             })
         elif state.get("type") == "vibration":
             sensors.append({
@@ -177,6 +183,6 @@ def build_zro_catalog(devices: dict[str, dict]) -> SensorCatalog:
                 "family": "vibrations",
                 "kind": "vibration",
                 "card": "timeline",
-                "stale_after_seconds": event_limit,
+                "stale_after_seconds": device_limit,
             })
     return SensorCatalog.model_validate({"sensors": sensors})

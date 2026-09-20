@@ -85,8 +85,18 @@ class EventStaleLimitTests(unittest.TestCase):
         self.assertEqual(by_kind["door"], DEFAULT_EVENT_STALE_AFTER_SECONDS)
         self.assertEqual(by_kind["vibration"], DEFAULT_EVENT_STALE_AFTER_SECONDS)
         self.assertEqual(by_kind["temperature"], DEFAULT_STALE_AFTER_SECONDS)
-        # La batería del propio sensor de puerta sí llega periódicamente.
-        self.assertEqual(by_kind["battery"], DEFAULT_STALE_AFTER_SECONDS)
+
+    def test_battery_follows_its_own_device(self):
+        """Viaja en los mismos mensajes que el sensor, así que hereda su ritmo."""
+        devices = {
+            "entrada": {"type": "contact", "contact": True, "battery": 88},
+            "salon": {"type": "climate", "temperature": 21.0, "battery": 74},
+        }
+        with mock.patch.dict(os.environ, {}, clear=True):
+            catalog = build_zro_catalog(devices)
+        by_id = {sensor.id: sensor.stale_after_seconds for sensor in catalog.sensors}
+        self.assertEqual(by_id["entrada_battery"], DEFAULT_EVENT_STALE_AFTER_SECONDS)
+        self.assertEqual(by_id["salon_battery"], DEFAULT_STALE_AFTER_SECONDS)
 
     def test_each_limit_is_configured_separately(self):
         devices = {"entrada": {"type": "contact", "contact": False}, "salon": {"type": "climate", "temperature": 21.0}}
@@ -96,6 +106,14 @@ class EventStaleLimitTests(unittest.TestCase):
         by_kind = {sensor.kind: sensor.stale_after_seconds for sensor in catalog.sensors}
         self.assertEqual(by_kind["door"], 7200)
         self.assertEqual(by_kind["temperature"], 600)
+
+    def test_a_quiet_house_does_not_turn_the_door_card_red(self):
+        """Caso real: puerta y su batería a 1,9 h sin reportar, sin avería."""
+        devices = {"entrada": {"type": "contact", "contact": False, "battery": 88}}
+        with mock.patch.dict(os.environ, {}, clear=True):
+            catalog = build_zro_catalog(devices)
+        age = 1.9 * 3600
+        self.assertTrue(all(age < sensor.stale_after_seconds for sensor in catalog.sensors))
 
 
 if __name__ == "__main__":

@@ -57,7 +57,7 @@ Guía de entrada y acceso: [README.md](README.md).
 - El backend normaliza las lecturas a `home/{dispositivo}/{medida}` y conserva el timestamp de origen.
 - Una lectura solo reemplaza al estado actual si es estrictamente más reciente (`supersedes`). Al reconectar, el broker reproduce retenidos con la última lectura que él guardó, no la última que ocurrió: aceptarlos hacía retroceder el estado y deshacía la recuperación desde InfluxDB del arranque.
 - El catálogo se genera desde los dispositivos recibidos; `backend/app/sensors.json` sirve de fallback cuando no hay inventario de zro-pi.
-- Obsolescencia por tipo de sensor: los periódicos usan `SENSOR_STALE_AFTER_SECONDS` (3600 s) y los de evento —puerta y vibración— `EVENT_SENSOR_STALE_AFTER_SECONDS` (86400 s). Su silencio es información, no avería: medido sobre siete días, la puerta calló hasta 2 h y la vibración 10,3 h sin incidencia alguna.
+- Obsolescencia por dispositivo, no por medida: los dispositivos periódicos (`climate`) usan `SENSOR_STALE_AFTER_SECONDS` (3600 s) y los de evento (`contact`, `vibration`) `EVENT_SENSOR_STALE_AFTER_SECONDS` (86400 s), incluida su batería, que viaja en los mismos mensajes. Su silencio es información, no avería: medido sobre siete días, la puerta calló hasta 2 h y la vibración 10,3 h sin incidencia alguna.
 - `/ZRO/bridge/state` informa del bridge y `/ZRO/pi/availability` de la disponibilidad de zro-pi.
 - Home Assistant fue la fuente original. Su histórico sigue siendo compatible, pero ya no define el inventario actual.
 
