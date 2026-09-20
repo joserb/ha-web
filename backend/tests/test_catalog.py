@@ -3,9 +3,11 @@ import unittest
 from unittest import mock
 
 from app.catalog import (
+    DEFAULT_EVENT_STALE_AFTER_SECONDS,
     DEFAULT_STALE_AFTER_SECONDS,
     SensorCatalog,
     build_zro_catalog,
+    event_stale_after_seconds,
     load_catalog,
     stale_after_seconds,
 )
@@ -53,6 +55,47 @@ class StaleLimitTests(unittest.TestCase):
         with mock.patch.dict("os.environ", {"SENSOR_STALE_AFTER_SECONDS": "1800"}):
             catalog = build_zro_catalog({"salon": device})
         self.assertEqual({sensor.stale_after_seconds for sensor in catalog.sensors}, {1800})
+
+
+class EventStaleLimitTests(unittest.TestCase):
+    """Puerta y vibración callan cuando no pasa nada; su silencio no es avería."""
+
+    def test_default_is_a_day_when_unset(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(event_stale_after_seconds(), DEFAULT_EVENT_STALE_AFTER_SECONDS)
+
+    def test_environment_overrides_the_default(self):
+        with mock.patch.dict("os.environ", {"EVENT_SENSOR_STALE_AFTER_SECONDS": "43200"}):
+            self.assertEqual(event_stale_after_seconds(), 43200)
+
+    def test_invalid_values_fall_back_to_the_default(self):
+        for raw in ["0", "-1", "cuatro", "99999999999"]:
+            with mock.patch.dict("os.environ", {"EVENT_SENSOR_STALE_AFTER_SECONDS": raw}):
+                self.assertEqual(event_stale_after_seconds(), DEFAULT_EVENT_STALE_AFTER_SECONDS, raw)
+
+    def test_event_sensors_do_not_use_the_periodic_limit(self):
+        devices = {
+            "entrada": {"type": "contact", "contact": True, "battery": 88},
+            "comedero-gatos": {"type": "vibration", "vibration": False},
+            "salon": {"type": "climate", "temperature": 21.0},
+        }
+        with mock.patch.dict(os.environ, {}, clear=True):
+            catalog = build_zro_catalog(devices)
+        by_kind = {sensor.kind: sensor.stale_after_seconds for sensor in catalog.sensors}
+        self.assertEqual(by_kind["door"], DEFAULT_EVENT_STALE_AFTER_SECONDS)
+        self.assertEqual(by_kind["vibration"], DEFAULT_EVENT_STALE_AFTER_SECONDS)
+        self.assertEqual(by_kind["temperature"], DEFAULT_STALE_AFTER_SECONDS)
+        # La batería del propio sensor de puerta sí llega periódicamente.
+        self.assertEqual(by_kind["battery"], DEFAULT_STALE_AFTER_SECONDS)
+
+    def test_each_limit_is_configured_separately(self):
+        devices = {"entrada": {"type": "contact", "contact": False}, "salon": {"type": "climate", "temperature": 21.0}}
+        env = {"SENSOR_STALE_AFTER_SECONDS": "600", "EVENT_SENSOR_STALE_AFTER_SECONDS": "7200"}
+        with mock.patch.dict("os.environ", env):
+            catalog = build_zro_catalog(devices)
+        by_kind = {sensor.kind: sensor.stale_after_seconds for sensor in catalog.sensors}
+        self.assertEqual(by_kind["door"], 7200)
+        self.assertEqual(by_kind["temperature"], 600)
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 
-from app.catalog import LOCATION_LABELS, build_zro_catalog, load_catalog
+from app.catalog import EVENT_KINDS, LOCATION_LABELS, build_zro_catalog, load_catalog
 from app.current_state import CurrentState, build_recovered_states
 from app.intervals import build_intervals, range_start
 from app.link_state import LinkState
@@ -407,7 +407,7 @@ async def intervals(
 ):
     sensor_catalog = build_zro_catalog(zro_devices) if zro_devices else load_catalog()
     sensor = next((item for item in sensor_catalog.sensors if item.id == sensor_id), None)
-    if sensor is None or sensor.kind not in {"door", "vibration"}:
+    if sensor is None or sensor.kind not in EVENT_KINDS:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Timeline sensor not found")
     event_rows = await events(sensor.location, sensor.measurement, period, None)

@@ -13,25 +13,38 @@ logger = logging.getLogger(__name__)
 # de casa reportan cada pocos minutos, así que una hora es holgada de sobra y
 # además señala de verdad. Configurable porque el sensor más lento manda.
 DEFAULT_STALE_AFTER_SECONDS = 3600
+# Puerta y vibración no reportan cada pocos minutos: hablan cuando pasa algo.
+# Medido sobre siete días reales, el mayor silencio de la puerta fue de 2 h y
+# el del sensor de vibración de 10,3 h, así que el umbral de una hora los
+# marcaba obsoletos constantemente sin que pasara nada. El catálogo estático
+# `sensors.json` ya daba 86400 s a la puerta; esta constante recupera esa
+# distinción, que se perdió al generar el catálogo desde zro-pi.
+DEFAULT_EVENT_STALE_AFTER_SECONDS = 86400
 MAX_STALE_AFTER_SECONDS = 31_536_000
+# Sensores cuyo silencio es información, no avería.
+EVENT_KINDS = frozenset({"door", "vibration"})
 
 
-def stale_after_seconds() -> int:
-    raw = os.getenv("SENSOR_STALE_AFTER_SECONDS")
+def _stale_seconds(variable: str, default: int) -> int:
+    raw = os.getenv(variable)
     if raw is None or not raw.strip():
-        return DEFAULT_STALE_AFTER_SECONDS
+        return default
     try:
         value = int(raw)
     except ValueError:
         value = 0
     if not 0 < value <= MAX_STALE_AFTER_SECONDS:
-        logger.warning(
-            "SENSOR_STALE_AFTER_SECONDS inválido (%r); se usa %d",
-            raw,
-            DEFAULT_STALE_AFTER_SECONDS,
-        )
-        return DEFAULT_STALE_AFTER_SECONDS
+        logger.warning("%s inválido (%r); se usa %d", variable, raw, default)
+        return default
     return value
+
+
+def stale_after_seconds() -> int:
+    return _stale_seconds("SENSOR_STALE_AFTER_SECONDS", DEFAULT_STALE_AFTER_SECONDS)
+
+
+def event_stale_after_seconds() -> int:
+    return _stale_seconds("EVENT_SENSOR_STALE_AFTER_SECONDS", DEFAULT_EVENT_STALE_AFTER_SECONDS)
 
 
 class SensorDefinition(BaseModel):
@@ -122,6 +135,7 @@ LOCATION_LABELS = {
 
 def build_zro_catalog(devices: dict[str, dict]) -> SensorCatalog:
     stale_limit = stale_after_seconds()
+    event_limit = event_stale_after_seconds()
     sensors = []
     for device, state in sorted(devices.items()):
         location = f"home/{device}"
@@ -150,7 +164,7 @@ def build_zro_catalog(devices: dict[str, dict]) -> SensorCatalog:
                 "family": "doors",
                 "kind": "door",
                 "card": "timeline",
-                "stale_after_seconds": stale_limit,
+                "stale_after_seconds": event_limit,
             })
         elif state.get("type") == "vibration":
             sensors.append({
@@ -163,6 +177,6 @@ def build_zro_catalog(devices: dict[str, dict]) -> SensorCatalog:
                 "family": "vibrations",
                 "kind": "vibration",
                 "card": "timeline",
-                "stale_after_seconds": stale_limit,
+                "stale_after_seconds": event_limit,
             })
     return SensorCatalog.model_validate({"sensors": sensors})
