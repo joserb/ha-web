@@ -65,3 +65,25 @@ Comprobar desde el VPS que solo la ruta de reproducción está expuesta, sustitu
 curl -s -o /dev/null -w '%{http_code}\n' http://IP_PI:1984/api/streams   # 404 esperado
 curl -s -o /dev/null -w '%{http_code}\n' http://IP_PI:1984/api/ws        # 400 esperado
 ```
+
+
+## Actualizar el stack desde GitHub
+
+El VPS se actualiza con `git pull`, pero **no tiene clave propia para GitHub**: hay que entrar reenviando el agente SSH desde el equipo que sí la tiene.
+
+```bash
+# en el equipo de desarrollo
+eval "$(ssh-agent -s)" && ssh-add ~/.ssh/github_joserb
+ssh -A charo-vps
+# en el VPS
+cd /opt/projects/ha-web && git pull --ff-only
+docker compose up -d --build nginx      # o backend, según lo que cambie
+```
+
+Alternativa permanente: una deploy key de solo lectura en el VPS. No está configurada.
+
+Antes de cada despliegue conviene guardar los fuentes y etiquetar la imagen anterior, como se hizo en `/opt/projects/ha-web-backups/<tema-fecha>/` e `ha-web-nginx:before-<tema>-<fecha>`; permite volver atrás sin depender de Git.
+
+Cambiar `.env` recrea todos los servicios que lo cargan, no solo el que se quería tocar: en la práctica, backend e InfluxDB también. Los datos viven en volúmenes y sobreviven, pero cuenta con un minuto de arranque del backend.
+
+Reiniciar el backend es seguro para el estado actual de los sensores: recupera las últimas lecturas desde InfluxDB y los retenidos que el broker reproduce al reconectar no las sobrescriben si son más antiguos. Antes del 2026-09-20 sí lo hacían, y cada reinicio dejaba todos los sensores marcados como obsoletos hasta que volvían a reportar.

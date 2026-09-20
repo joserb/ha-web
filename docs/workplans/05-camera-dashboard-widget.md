@@ -173,12 +173,15 @@ Verificado en local: `npm run typecheck` y `npm run build` correctos; la plantil
 - Reintentos 1, 3 y 5 s; después, Retry manual. Un contador de sesión invalida sockets, temporizadores y callbacks anteriores para que una conexión vieja no se apodere del reproductor.
 - Se recorta el búfer por encima de 30 s y se salta al directo si la reproducción se queda más de 5 s atrás.
 
-### Pendiente antes de activar en producción
+### Pendiente antes de dar la cámara por verificada
 
-- Desplegar `camera-gateway/` en la Pi y comprobar `docker compose ps`, logs y apertura/cierre del RTSP bajo demanda.
-- `nginx -t` y reproducción real desde escritorio y móvil por Tailscale; medir arranque, bitrate, CPU y memoria.
-- Comprobar que `/api/streams`, `/api/config` y la interfaz web responden 404, y que un `src` alterado desde el navegador no cambia la fuente.
-- Pruebas automatizadas del ciclo de vida del reproductor con transporte simulado: el frontend todavía no tiene runner de pruebas, así que añadirlo es una decisión pendiente.
+La tarjeta ya está activada en producción por decisión del usuario, con la cámara apagada; hasta cerrar esta lista, View live termina en error.
+
+- [x] Desplegar `camera-gateway/` en la Pi y comprobar `docker compose ps` y logs. Falta ver la apertura/cierre del RTSP bajo demanda con la cámara encendida.
+- [ ] Escribir la URL RTSP autenticada en `~/camera-gateway/go2rtc.yaml` de la Pi y reiniciar la pasarela.
+- [ ] Reproducción real desde escritorio y móvil por Tailscale; medir arranque, bitrate, CPU y memoria. `nginx -t` ya es correcto.
+- [x] `/api/streams`, `/api/config` y la interfaz web responden 404 desde la Pi y desde el VPS; un cliente sin `src` recibe igualmente la fuente configurada.
+- [ ] Pruebas automatizadas del ciclo de vida del reproductor con transporte simulado: el frontend todavía no tiene runner de pruebas, así que añadirlo es una decisión pendiente.
 
 
 ## Despliegue de la pasarela (2026-09-19)

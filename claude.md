@@ -1,6 +1,6 @@
 # CLAUDE.md — Contexto del proyecto ha-web
 
-Actualizado el 2026-09-18. Despliegue verificado en el VPS con backend, Nginx y worker de notificaciones saludables; reglas Telegram apagadas tras la entrega.
+Actualizado el 2026-09-20. Desplegado y verificado en el VPS; lo desplegado coincide con `main` en GitHub.
 
 Guía de entrada y acceso: [README.md](README.md).
 
@@ -88,6 +88,7 @@ Guía de entrada y acceso: [README.md](README.md).
 - Indicadores SVG semicirculares de temperatura (10–36 °C).
 - Tendencias separadas de temperatura, humedad, presión y batería; canales ocultables, sin persistencia todavía.
 - Timelines de puerta y vibración con zoom, actualización por WebSocket e intervalos de anchura visual mínima de 6 px.
+- Log `Recent events` bajo cada timeline: los cinco intervalos más recientes de la ventana visible, con duración y evento en curso. Derivado en `src/lib/timeline-events.ts` de los mismos datos que la barra; los contadores de la tarjeta salen de la misma derivación para que no se contradigan.
 - Selector global de rango y temas `System`/`Light`/`Dark`, con persistencia local.
 - Estado visible de la cadena navegador → backend → broker → bridge → Pi.
 - Tarjeta `Home camera` bajo demanda, independiente del estado de la API de sensores.
@@ -114,7 +115,9 @@ Guía de entrada y acceso: [README.md](README.md).
 
 ## Próximos pasos
 
-- Completar intervalos en los límites del rango, resúmenes y pruebas de contrato/UI.
+- Completar intervalos en los límites del rango, resúmenes y pruebas de contrato/UI. El log de eventos lo hace más visible: hoy avisa «Earlier events may fall outside this period».
+- Decidir el runner de pruebas del frontend (vitest); lo esperan el reproductor de cámara y el log de eventos.
+- Extender los avisos Telegram a vibración; hoy solo existen para puerta.
 - Añadir consultas multicanal por lotes, selector de familias y persistencia de canales.
 - Completar configuración del medidor y tendencia compacta por tarjeta.
 - Definir retención/downsampling, backups y restauración; verificar configuración del vigilante en el host.
@@ -155,5 +158,6 @@ Sintaxis del remapeo: [documentación de Mosquitto](https://mosquitto.org/man/mo
 - `LIVE` solo mientras la reproducción avanza; congelación de ~10 s, tres reintentos (1, 3 y 5 s) y después Retry manual. Pestaña oculta o tarjeta fuera de vista más de 3 s detienen el vídeo y ofrecen Resume.
 - Pasarela desplegada el 2026-09-19 en `pihomeblk-1`, en `~/camera-gateway` (junto a `zro-pi`; en la Pi no existe `/opt/projects`). Verificado desde la Pi y desde el VPS: solo `/api/ws` responde (400), el resto 404, y dentro del contenedor únicamente escucha el 1984.
 - `go2rtc.yaml` debe pertenecer a **root** con modo 600. El contenedor corre como root sin `CAP_DAC_OVERRIDE` por `cap_drop: ALL`: con otro propietario no lee la configuración, no avisa y arranca con los valores por defecto, que sirven la interfaz web y `/api/streams` con la URL de origen. El healthcheck exige ahora que `/api/streams` devuelva 404 para detectar justo ese caso.
-- **Pendiente**: la cámara está en la red (MAC EZVIZ en `.199`) pero con todos los puertos cerrados —modo privacidad o RTSP desactivado tras reinicio—, y la configuración desplegada conserva el marcador de credenciales. Faltan credenciales, reproducción real, medidas de latencia/bitrate/consumo y el despliegue del lado del VPS. Hasta entonces `CAMERA_ENABLED` sigue en `false`.
+- Lado del VPS desplegado el 2026-09-19 con `CAMERA_ENABLED=true` a petición del usuario: handshake 101 por `/camera/home/ws`, fuente fijada en servidor (un cliente sin `src` recibe igualmente `home_camera`) y la pasarela responde con error de conexión a la cámara. El texto de ese error no llega al navegador: incluía IP y puerto internos.
+- **Pendiente**: la cámara está en la red (MAC EZVIZ en `.199`) pero con todos los puertos cerrados —modo privacidad o RTSP desactivado tras reinicio— y la configuración desplegada conserva el marcador de credenciales. Faltan credenciales, reproducción real y medidas de latencia/bitrate/consumo. Mientras tanto la tarjeta muestra error al pulsar View live.
 - Plan y criterios de aceptación: [05-camera-dashboard-widget.md](docs/workplans/05-camera-dashboard-widget.md); evidencia: [04-camera-viewer-feasibility.md](docs/workplans/04-camera-viewer-feasibility.md).

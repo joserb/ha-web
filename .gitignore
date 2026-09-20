@@ -11,3 +11,5 @@ mosquitto/config/conf.d/bridge.conf
 .health/
 # Configuración de la pasarela de cámara: lleva la URL RTSP con credenciales
 camera-gateway/go2rtc.yaml
+# Entorno virtual local para las pruebas del backend (README, sección Pruebas)
+.venv/

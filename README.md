@@ -33,14 +33,15 @@ VPS charo-vps: Mosquitto → FastAPI → InfluxDB
 - La telemetría actual llega por `/ZRO/env/#`; el backend la normaliza a las series `home/{dispositivo}/{medida}`.
 - Home Assistant fue el origen inicial; su histórico sigue siendo compatible.
 - Compose ejecuta Mosquitto, InfluxDB 2, FastAPI y Nginx, que sirve el build de `frontend-react/`.
-- La interfaz incluye temperatura, tendencias por familia, timelines de puerta/vibración, rango global, temas y estado de conexión.
+- La interfaz incluye temperatura, tendencias por familia, timelines de puerta/vibración con log de últimos eventos, rango global, temas, estado de conexión, avisos por Telegram y vídeo en directo de la cámara.
+- El vídeo sigue un camino aparte: go2rtc en la Raspberry → Nginx del VPS → navegador, sin pasar por FastAPI ni MQTT.
 - `frontend/` conserva el prototipo anterior y no es la interfaz servida por Compose.
 
 ## Estado y documentación
 
-Revisión y despliegue verificados en el VPS: 2026-09-18. Los últimos commits locales (2026-08-08) refuerzan healthchecks y recuperación del stack; la entrega de avisos temporales del 2026-09-18 está desplegada desde el árbol de trabajo.
+Revisión y despliegue verificados en el VPS: 2026-09-20. Lo desplegado coincide con `main` en GitHub; el VPS se actualiza con `git pull` (procedimiento en [operación del host](docs/operacion-host.md)).
 
-Quedan pendientes consultas multicanal por lotes, detalles de intervalos al inicio del rango, persistencia de canales, pruebas completas de UI y acceso público autenticado.
+Quedan pendientes consultas multicanal por lotes, reconstrucción del estado anterior al inicio del rango, persistencia de canales, un runner de pruebas para el frontend, la verificación real de la cámara y el acceso público autenticado.
 
 - [Contexto técnico y API](claude.md)
 - [Operación del host y vigilante](docs/operacion-host.md)
@@ -69,14 +70,24 @@ Configuración: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `NOTIFICATION_TIMEZONE
 
 Las reglas y cola viven en el volumen `notification-data`, en `/data/notifications.sqlite3`; incluirlo en las copias de seguridad y no eliminarlo al recrear contenedores. Al usar otro nombre DNS, añadir su origen exacto a `NOTIFICATION_ALLOWED_ORIGINS`; el acceso sigue limitado a Tailscale/localhost.
 
-Pruebas del backend (en un entorno virtual):
+## Timelines y log de eventos
+
+Cada tarjeta de puerta o vibración dibuja los intervalos del periodo seleccionado y, debajo, **Recent events**: los cinco más recientes con hora de inicio y duración. Un evento en curso se marca como tal y su duración avanza sola. Arrastrar sobre la barra hace zoom temporal; el log sigue a la ventana visible, igual que el contador de la tarjeta. Un evento que empezó antes del periodo aparece como «started earlier», y el backend todavía no reconstruye ese estado previo, de modo que un log vacío no siempre significa que no pasó nada.
+
+## Lecturas obsoletas
+
+Una lectura se marca obsoleta según el ritmo del dispositivo, no de la medida: los climáticos deben hablar cada hora (`SENSOR_STALE_AFTER_SECONDS`), pero puerta y vibración —y su batería, que llega en los mismos mensajes— solo lo hacen cuando pasa algo, y tienen un día de margen (`EVENT_SENSOR_STALE_AFTER_SECONDS`). Medido sobre siete días, la puerta calló hasta 2 h y la vibración 10,3 h sin avería. Reiniciar el backend no altera las marcas: una lectura solo reemplaza al estado actual si es más reciente, así que los retenidos que el broker reproduce al reconectar no hacen retroceder nada.
+
+## Pruebas
+
+Backend, en un entorno virtual:
 
 ```bash
-pip install -r backend/requirements-dev.txt
-PYTHONPATH=backend python -m unittest discover -s backend/tests
-npm --prefix frontend-react run build
+python3 -m venv .venv && .venv/bin/pip install -r backend/requirements-dev.txt
+PYTHONPATH=backend .venv/bin/python -m unittest discover -s backend/tests
 ```
 
+Frontend: `npm --prefix frontend-react run typecheck` y `npm --prefix frontend-react run build`. No hay runner de pruebas de frontend todavía; la lógica del reproductor de cámara y del log de eventos vive en funciones puras (`src/hooks/use-camera-stream.ts`, `src/lib/timeline-events.ts`) a la espera de esa decisión.
 
 ## Cámara doméstica
 
@@ -91,6 +102,6 @@ Despliegue en dos partes:
 1. Pasarela en la Raspberry: [`camera-gateway/`](camera-gateway/README.md). Lleva su propio Compose, su `go2rtc.yaml` local con la URL RTSP autenticada y publica el puerto solo en la IP Tailscale de la Pi.
 2. Dashboard en el VPS: `CAMERA_ENABLED=true` y `CAMERA_GATEWAY_HOSTPORT=<IP Tailscale de la Pi>:1984` en el `.env`, y recrear el contenedor `nginx`.
 
-Con `CAMERA_ENABLED=false` (valor por defecto) la tarjeta no se monta y la ruta de vídeo no lleva a ningún sitio. La cámara funciona aunque falle la API de sensores, y los sensores y avisos siguen funcionando aunque falle la cámara.
+Con `CAMERA_ENABLED=false` (valor por defecto de la plantilla) la tarjeta no se monta y la ruta de vídeo no lleva a ningún sitio. La cámara funciona aunque falle la API de sensores, y los sensores y avisos siguen funcionando aunque falle la cámara.
 
-**Pendiente de verificación real:** reproducción en los navegadores objetivo, latencia, bitrate y consumo en la Pi. Hasta medirlos, el interruptor debe seguir apagado en producción. Detalle y criterios: [plan del widget](docs/workplans/05-camera-dashboard-widget.md).
+**Estado (2026-09-20):** pasarela desplegada en la Pi y tarjeta activada en el VPS a petición del usuario. Toda la cadena está verificada hasta la cámara, que en ese momento estaba apagada (en la red, con todos los puertos cerrados) y cuya URL RTSP autenticada aún no se ha escrito en `~/camera-gateway/go2rtc.yaml`. Mientras tanto, **View live** termina en «The gateway could not reach the camera». Quedan reproducción real, latencia, bitrate y consumo en la Pi. Detalle y criterios: [plan del widget](docs/workplans/05-camera-dashboard-widget.md).

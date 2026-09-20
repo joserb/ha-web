@@ -234,6 +234,9 @@ La migración detallada de interfaz, cards y visualizaciones se ejecuta mediante
 - 2026-07-26: iniciado el bridge MQTT RPi → VPS mediante Tailscale para `/ZRO/env/#`.
 - 2026-07-26: bridge verificado con siete retained; iniciada la adaptación del contrato `zro-pi` al esquema histórico `home/{ubicación}/{medida}`.
 - 2026-07-26: adaptador desplegado; 16 canales frescos se descubren desde `zro-pi` y se escriben conservando continuidad con el histórico anterior de Home Assistant.
+- 2026-09-18: avisos temporales de puerta por Telegram ([03](03-telegram-door-alerts.md)).
+- 2026-09-19: visor de cámara y pasarela go2rtc ([05](05-camera-dashboard-widget.md)); log de últimos eventos en timelines ([06](06-timeline-event-log.md)).
+- 2026-09-20: obsolescencia por tipo de dispositivo y regla `supersedes` para que los retenidos reproducidos al reconectar no hagan retroceder el estado actual.
 
 
 ## Ampliación planificada: cámara doméstica
