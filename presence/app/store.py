@@ -74,7 +74,7 @@ class PresenceStore:
                 first_t REAL NOT NULL, last_t REAL NOT NULL,
                 direction TEXT NOT NULL, confidence TEXT NOT NULL,
                 person_id INTEGER REFERENCES people(id) ON DELETE SET NULL,
-                identity TEXT NOT NULL DEFAULT 'auto',  -- auto | manual | ignored
+                identity TEXT NOT NULL DEFAULT 'auto',  -- auto | manual (confirmada por el usuario)
                 score REAL NOT NULL DEFAULT 0,
                 face_id INTEGER REFERENCES faces(id) ON DELETE SET NULL
             );
@@ -95,6 +95,18 @@ class PresenceStore:
                 self.db.execute(f"""DELETE FROM tracks WHERE face_id IS NULL
                                     AND last_t - first_t < {MIN_SECONDS}""")
                 self.db.execute("PRAGMA user_version = 1")
+            if version < 2:
+                # Archivar: revisado por el usuario y fuera del registro, pero
+                # sigue contando para saber quién está en casa.
+                for table in ("tracks", "events"):
+                    if "archived" not in {row[1] for row in self.db.execute(f"PRAGMA table_info({table})")}:
+                        self.db.execute(f"ALTER TABLE {table} ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
+                # «Ignorar» desaparece: lo que el usuario descartó era una
+                # detección que no quería ver, así que pasa a borrarse de verdad.
+                ignored = [row[0] for row in self.db.execute("SELECT face_id FROM tracks WHERE identity = 'ignored'")]
+                self.db.execute("DELETE FROM tracks WHERE identity = 'ignored'")
+                self.db.executemany("DELETE FROM faces WHERE id = ?", [(face,) for face in ignored if face])
+                self.db.execute("PRAGMA user_version = 2")
 
     def close(self):
         self.db.close()
@@ -183,14 +195,36 @@ class PresenceStore:
                             (person_id, track_id))
             self._reidentify(threshold)
 
-    def ignore_track(self, track_id: int, threshold: float):
-        """No es una persona, o no interesa: sale del estado y de la galería."""
+    def archive_track(self, track_id: int, threshold: float):
+        """Revisado y correcto: la identidad pasa a confirmada (y su cara, si la
+        hay, a la galería) y la fila sale del registro. Sigue contando para
+        saber quién está en casa. Una persona desconocida se archiva como tal."""
+        with self.lock, self.db:
+            track = self.db.execute("SELECT id, face_id, person_id FROM tracks WHERE id = ?", (track_id,)).fetchone()
+            if track is None:
+                raise NotFound("Track not found")
+            if track["person_id"] is not None:
+                self.db.execute("UPDATE tracks SET identity = 'manual', score = 1 WHERE id = ?", (track_id,))
+                if track["face_id"] is not None:
+                    self.db.execute("UPDATE faces SET person_id = ? WHERE id = ?", (track["person_id"], track["face_id"]))
+            self.db.execute("UPDATE tracks SET archived = 1 WHERE id = ?", (track_id,))
+            self._reidentify(threshold)
+
+    def delete_track(self, track_id: int, threshold: float):
+        """Detección errónea o que no interesa: se borran la fila, su imagen y
+        su cara, también de la galería, y deja de contar para nadie."""
         with self.lock, self.db:
             track = self._track(track_id)
+            self.db.execute("DELETE FROM tracks WHERE id = ?", (track_id,))
             if track["face_id"] is not None:
-                self.db.execute("UPDATE faces SET person_id = NULL WHERE id = ?", (track["face_id"],))
-            self.db.execute("UPDATE tracks SET person_id = NULL, identity = 'ignored' WHERE id = ?", (track_id,))
+                self.db.execute("DELETE FROM faces WHERE id = ?", (track["face_id"],))
             self._reidentify(threshold)
+
+    def archive_event(self, event_id: int):
+        """Para eventos sin nadie a la vista, que no tienen filas que archivar."""
+        with self.lock, self.db:
+            if self.db.execute("UPDATE events SET archived = 1 WHERE id = ?", (event_id,)).rowcount == 0:
+                raise NotFound("Event not found")
 
     def _reidentify(self, threshold: float):
         """Aplica la galería actual a las caras que el usuario no ha decidido."""
@@ -232,7 +266,7 @@ class PresenceStore:
                 last = self.db.execute(f"""
                     SELECT t.direction, t.confidence, e.opened_at, e.id AS event_id FROM tracks t
                     JOIN events e ON e.id = t.event_id
-                    WHERE t.person_id = ? AND t.identity != 'ignored'
+                    WHERE t.person_id = ?
                       AND t.direction IN ('{ENTERED}', '{LEFT}', '{STAYED}')
                     ORDER BY e.opened_at DESC, t.id DESC LIMIT 1""", (person["id"],)).fetchone()
                 result.append({
@@ -245,23 +279,31 @@ class PresenceStore:
                 })
         return result
 
-    def events(self, limit: int = 20) -> list[dict]:
+    def events(self, limit: int = 20, include_archived: bool = False) -> list[dict]:
+        """Eventos pendientes de revisar. Uno sale del registro cuando se
+        archiva entero o cuando se han archivado todas sus personas."""
+        pending = "" if include_archived else """
+            WHERE e.archived = 0 AND (NOT EXISTS (SELECT 1 FROM tracks t WHERE t.event_id = e.id)
+                                      OR EXISTS (SELECT 1 FROM tracks t WHERE t.event_id = e.id AND t.archived = 0))"""
         with self.lock:
-            events = self.db.execute("SELECT * FROM events ORDER BY opened_at DESC LIMIT ?", (limit,)).fetchall()
+            events = self.db.execute(f"SELECT e.* FROM events e {pending} ORDER BY e.opened_at DESC LIMIT ?",
+                                     (limit,)).fetchall()
             names = self.names()
             result = []
             for event in events:
-                tracks = self.db.execute("""
+                tracks = self.db.execute(f"""
                     SELECT t.id, t.first_t, t.last_t, t.direction, t.confidence, t.person_id, t.identity,
-                           t.score, t.face_id,
+                           t.score, t.face_id, t.archived,
                            (t.snapshot IS NOT NULL OR f.jpeg IS NOT NULL) AS has_image
                     FROM tracks t LEFT JOIN faces f ON f.id = t.face_id
-                    WHERE t.event_id = ? AND t.identity != 'ignored' ORDER BY t.first_t""",
-                    (event["id"],)).fetchall()
+                    WHERE t.event_id = ? {"" if include_archived else "AND t.archived = 0"}
+                    ORDER BY t.first_t""", (event["id"],)).fetchall()
                 result.append({
                     **dict(event),
+                    "archived": bool(event["archived"]),
                     "people": [{
                         **dict(track),
+                        "archived": bool(track["archived"]),
                         "has_image": bool(track["has_image"]),
                         "name": names.get(track["person_id"]),
                     } for track in tracks],
@@ -273,7 +315,7 @@ class PresenceStore:
         names = self.names()
         with self.lock:
             rows = self.db.execute("""SELECT person_id, direction, confidence FROM tracks
-                                      WHERE event_id = ? AND identity != 'ignored' ORDER BY first_t""",
+                                      WHERE event_id = ? ORDER BY first_t""",
                                    (event_id,)).fetchall()
         return [(names.get(row["person_id"], "Persona desconocida"), row["direction"], row["confidence"])
                 for row in rows]

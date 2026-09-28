@@ -49,16 +49,72 @@ class StoreTests(unittest.TestCase):
         self.assertEqual([(p["name"], p["state"], p["samples"]) for p in people], [("Ana", "away", 1)])
         self.assertEqual(len(self.store.gallery()), 1)
 
-    def test_state_follows_the_latest_event_and_ignored_tracks_do_not_count(self):
+    def test_state_follows_the_latest_event_and_deleted_tracks_do_not_count(self):
         sample = self.store.record_event(50, 60, 70, "ok", 40, [result(ENTERED, ANA)])
         ana = self.store.add_person("Ana", 1)
         self.store.label_track(self.track_ids(sample)[0], ana, THRESHOLD)
         self.store.record_event(100, 110, 120, "ok", 40, [result(LEFT, ANA, ana)])
-        latest = self.store.record_event(200, 210, 220, "ok", 40, [result(ENTERED, ANA, ana)])
+        latest = self.store.record_event(200, 210, 220, "ok", 40, [result(ENTERED, ANA, ana, snapshot=b"body")])
         self.assertEqual(self.store.people()[0]["state"], "home")
-        self.store.ignore_track(self.track_ids(latest)[0], THRESHOLD)
+        track_id = self.track_ids(latest)[0]
+        self.store.delete_track(track_id, THRESHOLD)
         self.assertEqual(self.store.people()[0]["state"], "away")
         self.assertEqual(self.store.events()[0]["people"], [])
+        with self.assertRaises(NotFound):
+            self.store.track_image(track_id)
+        # Su cara ya no existe: ni en el evento ni en la galería.
+        self.assertEqual(self.store.db.execute("SELECT count(*) FROM faces").fetchone()[0], 2)
+
+    def test_deleting_a_gallery_sample_takes_it_out_of_the_gallery(self):
+        event = self.store.record_event(100, 110, 120, "ok", 40, [result(ENTERED, ANA)])
+        ana = self.store.add_person("Ana", 1)
+        track_id = self.track_ids(event)[0]
+        self.store.label_track(track_id, ana, THRESHOLD)
+        self.store.delete_track(track_id, THRESHOLD)
+        self.assertEqual(self.store.gallery(), [])
+
+    def test_archiving_confirms_the_identity_and_hides_the_row_but_still_counts(self):
+        sample = self.store.record_event(50, 60, 70, "ok", 40, [result(ENTERED, ANA)])
+        ana = self.store.add_person("Ana", 1)
+        self.store.label_track(self.track_ids(sample)[0], ana, THRESHOLD)
+        event = self.store.record_event(100, 110, 120, "ok", 40, [
+            result(LEFT, (0.95, 0.05, 0.0), ana), result(LEFT, snapshot=b"stranger")])
+        known, stranger = self.track_ids(event)
+        self.assertEqual(self.store.event_lines(event)[0][0], "Ana")   # identificada en el análisis
+
+        self.store.archive_track(known, THRESHOLD)
+        row = self.store.db.execute("SELECT identity, archived FROM tracks WHERE id = ?", (known,)).fetchone()
+        self.assertEqual(tuple(row), ("manual", 1))
+        self.assertEqual(len(self.store.gallery()), 2)                  # su cara pasa a ser muestra
+        self.assertEqual(self.store.people()[0]["state"], "away")       # y sigue contando
+        visible = {e["id"]: [t["id"] for t in e["people"]] for e in self.store.events()}
+        self.assertEqual(visible[event], [stranger])
+
+        self.store.archive_track(stranger, THRESHOLD)                   # desconocida, se queda así
+        self.assertNotIn(event, [e["id"] for e in self.store.events()])
+        archived = next(e for e in self.store.events(include_archived=True) if e["id"] == event)
+        self.assertEqual([(t["name"], t["archived"]) for t in archived["people"]], [("Ana", True), (None, True)])
+
+    def test_events_without_people_are_archived_as_a_whole(self):
+        empty = self.store.record_event(100, 110, 120, "nobody_seen", 40, [])
+        self.assertEqual([e["id"] for e in self.store.events()], [empty])
+        self.store.archive_event(empty)
+        self.assertEqual(self.store.events(), [])
+        self.assertTrue(self.store.events(include_archived=True)[0]["archived"])
+        with self.assertRaises(NotFound):
+            self.store.archive_event(999)
+
+    def test_migration_turns_old_dismissals_into_deletions(self):
+        path = self.store.db.execute("PRAGMA database_list").fetchone()[2]
+        event = self.store.record_event(100, 110, 120, "ok", 40, [result(LEFT, ANA), result(ENTERED, BEA)])
+        dismissed, kept = self.track_ids(event)
+        with self.store.db:
+            self.store.db.execute("UPDATE tracks SET identity = 'ignored' WHERE id = ?", (dismissed,))
+            self.store.db.execute("PRAGMA user_version = 1")
+        self.store.close()
+        self.store = PresenceStore(path)
+        self.assertEqual(self.track_ids(event), [kept])
+        self.assertEqual(self.store.db.execute("SELECT count(*) FROM faces").fetchone()[0], 1)
 
     def test_manual_label_is_not_overwritten_by_the_gallery(self):
         event = self.store.record_event(100, 110, 120, "ok", 40, [result(ENTERED, ANA), result(ENTERED, ANA)])
@@ -177,10 +233,10 @@ class ApiTests(unittest.TestCase):
 
     def test_mutations_require_the_dashboard_origin_and_json(self):
         foreign = {"Origin": "http://evil.example", "Host": "localhost:8080"}
-        self.assertEqual(self.request("POST", f"/api/presence/tracks/{self.track}/ignore", json={},
+        self.assertEqual(self.request("POST", f"/api/presence/tracks/{self.track}/archive", json={},
                                       headers=foreign).status_code, 403)
         # Un formulario de otra web no llega a ejecutarse (el cuerpo no es JSON).
-        self.assertIn(self.request("POST", f"/api/presence/tracks/{self.track}/ignore", content="{}",
+        self.assertIn(self.request("POST", f"/api/presence/tracks/{self.track}/archive", content="{}",
                                       headers={**self.origin, "Content-Type": "text/plain"}).status_code,
                       (415, 422))
         self.assertEqual(self.changes, 0)
@@ -196,6 +252,21 @@ class ApiTests(unittest.TestCase):
         response = self.request("GET", f"/api/presence/tracks/{self.track}/image")
         self.assertEqual(response.headers["cache-control"], "no-store")
         self.assertEqual(response.headers["content-type"], "image/jpeg")
+
+    def test_archive_hides_and_include_archived_shows_again(self):
+        response = self.request("POST", f"/api/presence/tracks/{self.track}/archive", json={}, headers=self.origin)
+        self.assertEqual(response.json()["events"], [])
+        archived = self.request("GET", "/api/presence/state?include_archived=true").json()
+        self.assertTrue(archived["events"][0]["people"][0]["archived"])
+
+    def test_delete_track_needs_the_dashboard(self):
+        foreign = {"Origin": "http://evil.example", "Host": "localhost:8080"}
+        self.assertEqual(self.request("DELETE", f"/api/presence/tracks/{self.track}", json={},
+                                      headers=foreign).status_code, 403)
+        response = self.request("DELETE", f"/api/presence/tracks/{self.track}", json={}, headers=self.origin)
+        self.assertEqual(response.json()["events"][0]["people"], [])
+        self.assertEqual(self.request("DELETE", f"/api/presence/tracks/{self.track}", json={},
+                                      headers=self.origin).status_code, 404)
 
     def test_delete_person(self):
         self.request("POST", f"/api/presence/tracks/{self.track}/label", json={"name": "Ana"}, headers=self.origin)

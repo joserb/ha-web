@@ -75,8 +75,8 @@ def build_router(store: PresenceStore, status: Callable[[], dict], threshold: fl
         return {"status": "healthy"}
 
     @router.get("/state")
-    def state():
-        return {**status(), "people": store.people(), "events": store.events(20)}
+    def state(include_archived: bool = False):
+        return {**status(), "people": store.people(), "events": store.events(20, include_archived)}
 
     @router.get("/tracks/{track_id}/image")
     def track_image(track_id: int):
@@ -98,10 +98,20 @@ def build_router(store: PresenceStore, status: Callable[[], dict], threshold: fl
             store.label_track(track_id, person_id, threshold)
         return guarded(action)
 
-    @router.post("/tracks/{track_id}/ignore")
-    def ignore_track(track_id: int, body: Empty, request: Request):
+    @router.post("/tracks/{track_id}/archive")
+    def archive_track(track_id: int, body: Empty, request: Request):
         check_mutation(request)
-        return guarded(lambda: store.ignore_track(track_id, threshold))
+        return guarded(lambda: store.archive_track(track_id, threshold))
+
+    @router.delete("/tracks/{track_id}")
+    def delete_track(track_id: int, body: Empty, request: Request):
+        check_mutation(request)
+        return guarded(lambda: store.delete_track(track_id, threshold))
+
+    @router.post("/events/{event_id}/archive")
+    def archive_event(event_id: int, body: Empty, request: Request):
+        check_mutation(request)
+        return guarded(lambda: store.archive_event(event_id))
 
     @router.patch("/people/{person_id}")
     def rename_person(person_id: int, body: RenamePerson, request: Request):

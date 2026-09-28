@@ -21,6 +21,7 @@ export interface PresenceTrack {
   score: number;
   face_id: number | null;
   has_image: boolean;
+  archived: boolean;
   name: string | null;
 }
 
@@ -31,6 +32,7 @@ export interface PresenceEvent {
   analysed_at: number;
   status: "ok" | "nobody_seen" | "no_video";
   frames: number;
+  archived: boolean;
   people: PresenceTrack[];
 }
 
@@ -59,15 +61,20 @@ async function send(method: string, path: string, body: object): Promise<Presenc
   return response.json() as Promise<PresenceState>;
 }
 
-export async function fetchPresence(signal?: AbortSignal): Promise<PresenceState> {
-  const response = await fetch("/api/presence/state", { signal });
+export async function fetchPresence(includeArchived: boolean, signal?: AbortSignal): Promise<PresenceState> {
+  const response = await fetch(`/api/presence/state${includeArchived ? "?include_archived=true" : ""}`, { signal });
   if (!response.ok) throw new Error(`Presence service unavailable (${response.status})`);
   return response.json() as Promise<PresenceState>;
 }
 
 export const labelTrack = (trackId: number, target: { person_id: number } | { name: string }) =>
   send("POST", `/tracks/${trackId}/label`, target);
-export const ignoreTrack = (trackId: number) => send("POST", `/tracks/${trackId}/ignore`, {});
+// Archive: the identification is right; keep it counting for who is home but
+// take it out of the log. Delete: wrong or unwanted; the detection, its image
+// and its face are erased and it no longer counts for anyone.
+export const archiveTrack = (trackId: number) => send("POST", `/tracks/${trackId}/archive`, {});
+export const deleteTrack = (trackId: number) => send("DELETE", `/tracks/${trackId}`, {});
+export const archiveEvent = (eventId: number) => send("POST", `/events/${eventId}/archive`, {});
 export const renamePerson = (personId: number, name: string) => send("PATCH", `/people/${personId}`, { name });
 export const deletePerson = (personId: number) => send("DELETE", `/people/${personId}`, {});
 

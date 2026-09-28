@@ -195,6 +195,23 @@ veían afectados, porque salen de los puntos de referencia.
 - Borrar a una persona borra también las imágenes de cuerpo que tiene
   atribuidas.
 
+## Archivar y borrar (2026-09-29)
+
+«Dismiss» ocultaba la detección y la sacaba del estado y de la galería,
+pero conservaba la imagen hasta la purga: no era ni un borrado ni una
+confirmación. El usuario propuso separar las dos intenciones:
+
+- **Archive**: la identificación es correcta. Pasa a `manual`, su cara (si
+  la hay) entra en la galería, sigue contando para quién está en casa y
+  sale del registro. Una persona desconocida se archiva como desconocida.
+- **Delete**: detección errónea o que no interesa. Se borran la fila, la
+  imagen y la cara, también como muestra de galería.
+- Un evento sale del registro cuando se archiva entero (los que no tienen
+  a nadie) o cuando todas sus personas están archivadas. `?include_archived=true`
+  en `/api/presence/state` los devuelve.
+- La migración 2 convierte los descartes antiguos (`identity = 'ignored'`)
+  en borrados.
+
 ## Criterios de aceptación
 
 - Una salida real con la persona etiquetada produce «X ha salido» en el
