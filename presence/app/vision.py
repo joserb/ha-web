@@ -13,7 +13,10 @@ import numpy as np
 from app.tracking import Detection, FaceSample
 
 PERSON_CLASS = 0
-PERSON_THRESHOLD = 0.4
+# 0,35 es el valor de la demo de OpenCV Zoo. Con 0,4, una persona de espaldas
+# con infrarrojo (0,47–0,54 medido el 2026-09-28) caía bajo el umbral en
+# frames sueltos y su recorrido se partía en dos trayectorias.
+PERSON_THRESHOLD = 0.35
 FACE_THRESHOLD = 0.7
 NANODET_SIZE = 416
 REG_MAX = 7
