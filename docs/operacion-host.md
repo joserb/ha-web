@@ -84,6 +84,16 @@ Alternativa permanente: una deploy key de solo lectura en el VPS. No está confi
 
 Antes de cada despliegue conviene guardar los fuentes y etiquetar la imagen anterior, como se hizo en `/opt/projects/ha-web-backups/<tema-fecha>/` e `ha-web-nginx:before-<tema>-<fecha>`; permite volver atrás sin depender de Git.
 
+Las bases SQLite de los volúmenes (`notifications.sqlite3` del backend y `presence.sqlite3` de `presence`) usan WAL: las escrituras recientes viven en el fichero `-wal` hasta el siguiente checkpoint. Un `docker compose cp` del fichero principal con el servicio en marcha **no es una copia válida**. El 2026-09-28, la copia previa al despliegue de `presence` salió vacía. Copiar con la API de backup de SQLite:
+
+```bash
+docker compose exec -T presence python -c "import sqlite3; s=sqlite3.connect('/data/presence.sqlite3'); d=sqlite3.connect('/tmp/copia.sqlite3'); s.backup(d); d.close()"
+docker compose cp presence:/tmp/copia.sqlite3 /opt/projects/ha-web-backups/<tema-fecha>/presence.sqlite3
+docker compose exec -T presence rm /tmp/copia.sqlite3
+```
+
+Para el backend, lo mismo con `backend` y `/data/notifications.sqlite3`.
+
 Cambiar `.env` recrea todos los servicios que lo cargan, no solo el que se quería tocar: en la práctica, backend e InfluxDB también. Los datos viven en volúmenes y sobreviven, pero cuenta con un minuto de arranque del backend.
 
 Reiniciar el backend es seguro para el estado actual de los sensores: recupera las últimas lecturas desde InfluxDB y los retenidos que el broker reproduce al reconectar no las sobrescriben si son más antiguos. Antes del 2026-09-20 sí lo hacían, y cada reinicio dejaba todos los sensores marcados como obsoletos hasta que volvían a reportar.
