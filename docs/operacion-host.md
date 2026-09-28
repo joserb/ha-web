@@ -48,7 +48,7 @@ El backend mantiene las reglas y la cola Telegram en el volumen Compose `notific
 
 Los avisos usan `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` del `.env`, compartidos con el vigilante. La presencia de ambas variables habilita el control; la entrega real requiere además que el bot tenga acceso al chat. Los errores se muestran en la tarjeta sin revelar credenciales.
 
-Despliegue del 2026-09-18: fuentes anteriores guardadas en `/opt/projects/ha-web-backups/telegram-20260918/source-before.tgz`; imágenes anteriores `ha-web-backend:before-telegram-20260918` y `ha-web-nginx:before-telegram-20260918`. El rollback puede restaurar estas fuentes e imágenes conservando todos los volúmenes. El frontend anterior no muestra el control; desactivar cualquier regla activa antes de volver a la versión anterior.
+Despliegue del 2026-09-18. Sus respaldos previos (fuentes e imágenes `before-telegram-20260918`) se borraron el 2026-09-28: volver atrás es ahora revertir en Git y reconstruir, conservando todos los volúmenes. El frontend anterior no muestra el control; desactivar cualquier regla activa antes de volver a la versión anterior.
 
 
 ## Pasarela de cámara
@@ -83,6 +83,8 @@ docker compose up -d --build nginx      # o backend, según lo que cambie
 Alternativa permanente: una deploy key de solo lectura en el VPS. No está configurada.
 
 Antes de cada despliegue conviene guardar los fuentes y etiquetar la imagen anterior, como se hizo en `/opt/projects/ha-web-backups/<tema-fecha>/` e `ha-web-nginx:before-<tema>-<fecha>`; permite volver atrás sin depender de Git.
+
+Esos respaldos son temporales: una vez verificado el despliegue, se borran en la siguiente limpieza. Contienen `.env` y otros ficheros con secretos. Limpieza del 2026-09-28: se borraron los respaldos de Telegram, cámara y presencia (salvo la copia consistente `presence-cleanup-20260928/`), las copias sueltas `.env.before-camera-20260919` y `bridge.conf.before-topic-remap-20260918`, las imágenes `before-telegram`, `before-camera` y `before-eventlog`, y la caché de build de Docker, que es común con OpenClaw. Se liberaron unos 7 GB y el disco pasó del 77 % al 59 %. Se conservan las imágenes `before-presence-20260928` hasta verificar la presencia con eventos reales.
 
 Las bases SQLite de los volúmenes (`notifications.sqlite3` del backend y `presence.sqlite3` de `presence`) usan WAL: las escrituras recientes viven en el fichero `-wal` hasta el siguiente checkpoint. Un `docker compose cp` del fichero principal con el servicio en marcha **no es una copia válida**. El 2026-09-28, la copia previa al despliegue de `presence` salió vacía. Copiar con la API de backup de SQLite:
 
@@ -175,8 +177,8 @@ Mosquitto y un manifiesto. La clave SSH de backup solo permite generar el snapsh
 
 **Cobertura parcial**: no se encontró programación para respaldar los volúmenes de
 InfluxDB y notificaciones de ha-web, sus secretos/configuración ni el directorio
-`camera-gateway` de la Pi. Las copias `ha-web-backups/telegram-20260918` y
-`camera-20260919` son anteriores a despliegues, no una copia diaria completa.
+`camera-gateway` de la Pi. Lo que hay en `ha-web-backups/` son respaldos puntuales
+previos a un despliegue, no una copia diaria completa.
 La Raspberry tiene copia fuera de la Pi, pero no se verificó una segunda copia fuera
 del VPS ni una restauración con la clave privada. El resumen diario no presenta esas
 partes como protegidas.
