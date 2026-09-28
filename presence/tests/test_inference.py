@@ -68,13 +68,23 @@ class TrackerTests(unittest.TestCase):
         self.assertEqual(len(tracks), 2)
         self.assertTrue(all(len(track.observations) == 8 for track in tracks))
 
-    def test_long_gap_starts_a_new_track_and_single_blips_are_dropped(self):
+    def test_short_faceless_fragments_are_noise(self):
         tracker = Tracker(max_gap=2)
-        tracker.update(100, [Detection(ROOM, 0.8)])
-        tracker.update(100.5, [Detection(ROOM, 0.8)])
+        for t in (100, 100.3, 100.6):      # tres detecciones, pero 0,6 s
+            tracker.update(t, [Detection(ROOM, 0.8)])
         tracker.update(110, [Detection(ROOM, 0.8)])
+        tracker.update(111, [Detection(ROOM, 0.8)])   # 1 s, pero solo dos
+        self.assertEqual(tracker.tracks(), [])
+        for t in (120, 120.5, 121):
+            tracker.update(t, [Detection(ROOM, 0.8)])
         self.assertEqual(len(tracker.tracks()), 1)
-        self.assertEqual(len(tracker.tracks(min_observations=1)), 2)
+
+    def test_best_snapshot_is_large_confident_with_a_face_and_not_cut_by_the_edge(self):
+        tracker = Tracker()
+        tracker.update(100, [Detection((0.85, 0.1, 1.0, 0.95), 0.9, snapshot=b"cut")])
+        tracker.update(100.5, [Detection((0.7, 0.2, 0.85, 0.9), 0.6, snapshot=b"small")])
+        tracker.update(101, [Detection((0.6, 0.2, 0.75, 0.9), 0.6, face((1, 0)), snapshot=b"face")])
+        self.assertEqual(tracker.tracks()[0].snapshot.jpeg, b"face")
 
     def test_single_detection_with_a_face_is_kept(self):
         tracker = Tracker()
@@ -112,6 +122,7 @@ class SummaryTests(unittest.TestCase):
         tracker.update(99, [Detection(DOOR, 0.8, known)])
         tracker.update(101, [Detection(DOOR, 0.8), Detection((0.4, 0.2, 0.5, 0.9), 0.8)])
         tracker.update(101.5, [Detection((0.4, 0.2, 0.5, 0.9), 0.8)])
+        tracker.update(102.2, [Detection((0.4, 0.2, 0.5, 0.9), 0.8)])
         results = summarize(tracker.tracks(), Window(OPEN, CLOSE, ZONE), [(7, (1.0, 0.0, 0.0))], 0.363)
         self.assertEqual([(r.person_id, r.verdict.direction) for r in results], [(7, LEFT), (None, LEFT)])
         self.assertEqual(results[0].verdict.confidence, HIGH)

@@ -12,6 +12,7 @@ from pathlib import Path
 
 from app.identity import Gallery, best_match
 from app.inference import ENTERED, LEFT, STAYED
+from app.tracking import MIN_SECONDS
 
 NAME_MAX = 40
 
@@ -80,6 +81,20 @@ class PresenceStore:
             CREATE INDEX IF NOT EXISTS tracks_event ON tracks(event_id);
             CREATE INDEX IF NOT EXISTS events_opened ON events(opened_at);
         """)
+        self._migrate()
+
+    def _migrate(self):
+        version = self.db.execute("PRAGMA user_version").fetchone()[0]
+        with self.db:
+            if version < 1:
+                # Imagen de la persona entera: quien sale de espaldas no tiene cara.
+                if "snapshot" not in {row[1] for row in self.db.execute("PRAGMA table_info(tracks)")}:
+                    self.db.execute("ALTER TABLE tracks ADD COLUMN snapshot BLOB")
+                # Limpieza del registro anterior al filtro de ruido: trozos de
+                # menos de un segundo sin cara, que salían como «salió» sin imagen.
+                self.db.execute(f"""DELETE FROM tracks WHERE face_id IS NULL
+                                    AND last_t - first_t < {MIN_SECONDS}""")
+                self.db.execute("PRAGMA user_version = 1")
 
     def close(self):
         self.db.close()
@@ -100,10 +115,11 @@ class PresenceStore:
                         "INSERT INTO faces (event_id, created_at, jpeg, embedding) VALUES (?, ?, ?, ?)",
                         (event_id, analysed_at, result.face.jpeg, _pack(result.face.embedding))).lastrowid
                 self.db.execute(
-                    """INSERT INTO tracks (event_id, first_t, last_t, direction, confidence, person_id, score, face_id)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    """INSERT INTO tracks (event_id, first_t, last_t, direction, confidence, person_id, score, face_id,
+                                           snapshot)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (event_id, result.first.t, result.last.t, result.verdict.direction,
-                     result.verdict.confidence, result.person_id, result.score, face_id))
+                     result.verdict.confidence, result.person_id, result.score, face_id, result.snapshot))
         return event_id
 
     def gallery(self) -> Gallery:
@@ -137,27 +153,43 @@ class PresenceStore:
     def delete_person(self, person_id: int, threshold: float):
         """Borra a la persona y sus muestras; sus apariciones pasan a desconocidas."""
         with self.lock, self.db:
+            # Supresión completa: también las imágenes de cuerpo atribuidas.
+            self.db.execute("UPDATE tracks SET snapshot = NULL WHERE person_id = ?", (person_id,))
             if self.db.execute("DELETE FROM people WHERE id = ?", (person_id,)).rowcount == 0:
                 raise NotFound("Person not found")
             self.db.execute("UPDATE tracks SET identity = 'auto', score = 0 WHERE person_id IS NULL AND identity = 'manual'")
             self._reidentify(threshold)
 
-    def label_face(self, face_id: int, person_id: int, threshold: float):
+    def _track(self, track_id: int) -> sqlite3.Row:
+        row = self.db.execute("SELECT id, face_id FROM tracks WHERE id = ?", (track_id,)).fetchone()
+        if row is None:
+            raise NotFound("Track not found")
+        return row
+
+    def require_track(self, track_id: int):
+        with self.lock:
+            self._track(track_id)
+
+    def label_track(self, track_id: int, person_id: int, threshold: float):
+        """Quién era. Si hay cara, además enseña a la galería; si no (de
+        espaldas), solo corrige el evento y el estado de esa persona."""
         with self.lock, self.db:
+            track = self._track(track_id)
             if not self.db.execute("SELECT 1 FROM people WHERE id = ?", (person_id,)).fetchone():
                 raise NotFound("Person not found")
-            if self.db.execute("UPDATE faces SET person_id = ? WHERE id = ?", (person_id, face_id)).rowcount == 0:
-                raise NotFound("Face not found")
-            self.db.execute("UPDATE tracks SET person_id = ?, identity = 'manual', score = 1 WHERE face_id = ?",
-                            (person_id, face_id))
+            if track["face_id"] is not None:
+                self.db.execute("UPDATE faces SET person_id = ? WHERE id = ?", (person_id, track["face_id"]))
+            self.db.execute("UPDATE tracks SET person_id = ?, identity = 'manual', score = 1 WHERE id = ?",
+                            (person_id, track_id))
             self._reidentify(threshold)
 
-    def ignore_face(self, face_id: int, threshold: float):
+    def ignore_track(self, track_id: int, threshold: float):
         """No es una persona, o no interesa: sale del estado y de la galería."""
         with self.lock, self.db:
-            if self.db.execute("UPDATE faces SET person_id = NULL WHERE id = ?", (face_id,)).rowcount == 0:
-                raise NotFound("Face not found")
-            self.db.execute("UPDATE tracks SET person_id = NULL, identity = 'ignored' WHERE face_id = ?", (face_id,))
+            track = self._track(track_id)
+            if track["face_id"] is not None:
+                self.db.execute("UPDATE faces SET person_id = NULL WHERE id = ?", (track["face_id"],))
+            self.db.execute("UPDATE tracks SET person_id = NULL, identity = 'ignored' WHERE id = ?", (track_id,))
             self._reidentify(threshold)
 
     def _reidentify(self, threshold: float):
@@ -174,12 +206,15 @@ class PresenceStore:
 
     # --- Lectura para la API -----------------------------------------------
 
-    def face_jpeg(self, face_id: int) -> bytes:
+    def track_image(self, track_id: int) -> bytes:
+        """La persona entera si se guardó; si no (eventos antiguos), su cara."""
         with self.lock:
-            row = self.db.execute("SELECT jpeg FROM faces WHERE id = ?", (face_id,)).fetchone()
-        if row is None:
-            raise NotFound("Face not found")
-        return row["jpeg"]
+            row = self.db.execute("""SELECT t.snapshot, f.jpeg FROM tracks t
+                                     LEFT JOIN faces f ON f.id = t.face_id WHERE t.id = ?""", (track_id,)).fetchone()
+        image = row and (row["snapshot"] or row["jpeg"])
+        if not image:
+            raise NotFound("No image for this track")
+        return image
 
     def people(self) -> list[dict]:
         """Cada persona con su estado, derivado de su último evento.
@@ -217,13 +252,17 @@ class PresenceStore:
             result = []
             for event in events:
                 tracks = self.db.execute("""
-                    SELECT id, first_t, last_t, direction, confidence, person_id, identity, score, face_id
-                    FROM tracks WHERE event_id = ? AND identity != 'ignored' ORDER BY first_t""",
+                    SELECT t.id, t.first_t, t.last_t, t.direction, t.confidence, t.person_id, t.identity,
+                           t.score, t.face_id,
+                           (t.snapshot IS NOT NULL OR f.jpeg IS NOT NULL) AS has_image
+                    FROM tracks t LEFT JOIN faces f ON f.id = t.face_id
+                    WHERE t.event_id = ? AND t.identity != 'ignored' ORDER BY t.first_t""",
                     (event["id"],)).fetchall()
                 result.append({
                     **dict(event),
                     "people": [{
                         **dict(track),
+                        "has_image": bool(track["has_image"]),
                         "name": names.get(track["person_id"]),
                     } for track in tracks],
                 })

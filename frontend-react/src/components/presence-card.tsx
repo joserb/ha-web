@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  deletePerson, faceImageUrl, fetchPresence, ignoreFace, labelFace, renamePerson,
+  deletePerson, fetchPresence, ignoreTrack, labelTrack, renamePerson, trackImageUrl,
   type PresenceEvent, type PresencePerson, type PresenceState, type PresenceTrack,
 } from "@/lib/presence";
 
@@ -89,8 +89,8 @@ export function PresenceCard({ version }: { version: number }) {
         {state && <Events events={state.events.slice(0, EVENT_LIMIT)} people={state.people} busy={busy} run={run} />}
         {error && state && <p className="text-xs text-destructive" role="alert">{error}</p>}
         {state && <p className="text-xs text-muted-foreground">
-          Faces are matched on this server only. Unlabelled face crops are deleted after {state.retention_days} days;
-          labelled ones stay until you delete the person.
+          Images and face matching stay on this server. Events and their images are deleted after
+          {" "}{state.retention_days} days; labelled faces stay until you delete the person.
         </p>}
       </CardContent>
     </Card>
@@ -103,7 +103,7 @@ function People({ people, busy, run }: { people: PresencePerson[]; busy: boolean
   const [editing, setEditing] = useState(false);
   if (!people.length) {
     return <p className="text-sm text-muted-foreground">
-      Nobody is known yet. Label the faces below after someone comes in or goes out.
+      Nobody is known yet. Use “Who is it?” on the door events below after someone comes in or goes out.
     </p>;
   }
   return <div>
@@ -144,7 +144,7 @@ function Events({ events, people, busy, run }: { events: PresenceEvent[]; people
             <time dateTime={new Date(event.opened_at * 1000).toISOString()} className="tabular-nums">{formatTime(event.opened_at)}</time>
             {event.status === "no_video" && <span className="text-muted-foreground">Door opened · no camera video</span>}
             {event.status === "nobody_seen" && <span className="text-muted-foreground">Door opened · nobody seen</span>}
-            {event.status === "ok" && event.people.length === 0 && <span className="text-muted-foreground">Door opened · detections dismissed</span>}
+            {event.status === "ok" && event.people.length === 0 && <span className="text-muted-foreground">Door opened · nobody seen</span>}
           </div>
           {event.people.length > 0 && <ul className="mt-1.5 space-y-1.5">
             {event.people.map((track) => <Track key={track.id} track={track} people={people} busy={busy} run={run} />)}
@@ -158,30 +158,35 @@ function Track({ track, people, busy, run }: { track: PresenceTrack; people: Pre
   const [labelling, setLabelling] = useState(false);
   const [choice, setChoice] = useState("");
   const [name, setName] = useState("");
-  const faceId = track.face_id;
+  const [broken, setBroken] = useState(false);
+  const label = track.name ?? "Unknown person";
 
   function save() {
-    if (faceId === null) return;
     const target = choice ? { person_id: Number(choice) } : { name: name.trim() };
     if ("name" in target && !target.name) return;
-    void run(() => labelFace(faceId, target)).then(() => setLabelling(false));
+    void run(() => labelTrack(track.id, target)).then(() => setLabelling(false));
   }
 
-  return <li className="flex flex-wrap items-center gap-2 text-sm">
-    {faceId !== null
-      ? <img src={faceImageUrl(faceId)} alt={track.name ?? "Unknown person"} width={40} height={40}
-          className="h-10 w-10 rounded-md bg-muted object-cover" />
-      : <span className="flex h-10 w-10 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground" aria-hidden="true">?</span>}
+  return <li className="flex flex-wrap items-center gap-3 text-sm">
+    {/* The whole person in their clearest frame: people going out show their
+        back, so a face crop alone left most of the log blank. */}
+    {track.has_image && !broken
+      ? <a href={trackImageUrl(track.id)} target="_blank" rel="noreferrer" title="Open full size"
+          className="shrink-0 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2">
+          <img src={trackImageUrl(track.id)} alt={label} loading="lazy" onError={() => setBroken(true)}
+            className="h-20 w-auto max-w-32 rounded-md bg-muted object-contain" />
+        </a>
+      : <span className="flex h-20 w-14 shrink-0 items-center justify-center rounded-md bg-muted text-center text-[10px] leading-tight text-muted-foreground">No image</span>}
     <span>
-      <span className="font-medium">{track.name ?? "Unknown person"}</span>
+      <span className="font-medium">{label}</span>
       {" "}{DIRECTION_TEXT[track.direction]}
       {track.confidence !== "high" && <span className="text-muted-foreground"> ({track.confidence} confidence)</span>}
     </span>
-    {faceId !== null && !labelling && <>
+    {!labelling && <>
       <button type="button" className={BUTTON} disabled={busy} onClick={() => setLabelling(true)}>
-        {track.identity === "manual" ? "Relabel" : track.name ? "Not them?" : "Label"}
+        {track.identity === "manual" ? "Relabel" : track.name ? "Not them?" : "Who is it?"}
       </button>
-      <button type="button" className={BUTTON} disabled={busy} onClick={() => void run(() => ignoreFace(faceId))}>Dismiss</button>
+      <button type="button" className={BUTTON} disabled={busy} onClick={() => void run(() => ignoreTrack(track.id))}>Dismiss</button>
     </>}
     {labelling && <form className="flex flex-wrap items-center gap-2" onSubmit={(event) => { event.preventDefault(); save(); }}>
       {people.length > 0 && <select value={choice} onChange={(event) => setChoice(event.target.value)} aria-label="Person"

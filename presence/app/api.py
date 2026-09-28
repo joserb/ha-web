@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.store import Invalid, NotFound, PresenceStore
 
 
-class LabelFace(BaseModel):
+class LabelTrack(BaseModel):
     model_config = ConfigDict(extra="forbid")
     person_id: int | None = Field(default=None, ge=1)
     name: str | None = Field(default=None, max_length=80)
@@ -78,29 +78,30 @@ def build_router(store: PresenceStore, status: Callable[[], dict], threshold: fl
     def state():
         return {**status(), "people": store.people(), "events": store.events(20)}
 
-    @router.get("/faces/{face_id}/image")
-    def face_image(face_id: int):
+    @router.get("/tracks/{track_id}/image")
+    def track_image(track_id: int):
         try:
-            jpeg = store.face_jpeg(face_id)
+            jpeg = store.track_image(track_id)
         except NotFound as exc:
             raise HTTPException(404, str(exc)) from None
-        # Dato biométrico: ni cachés intermedias ni del navegador.
+        # Imagen de una persona: ni cachés intermedias ni del navegador.
         return Response(jpeg, media_type="image/jpeg",
                         headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
-    @router.post("/faces/{face_id}/label")
-    def label_face(face_id: int, body: LabelFace, request: Request):
+    @router.post("/tracks/{track_id}/label")
+    def label_track(track_id: int, body: LabelTrack, request: Request):
         check_mutation(request)
 
         def action():
+            store.require_track(track_id)  # antes de crear a nadie
             person_id = body.person_id or store.add_person(body.name or "", time.time())
-            store.label_face(face_id, person_id, threshold)
+            store.label_track(track_id, person_id, threshold)
         return guarded(action)
 
-    @router.post("/faces/{face_id}/ignore")
-    def ignore_face(face_id: int, body: Empty, request: Request):
+    @router.post("/tracks/{track_id}/ignore")
+    def ignore_track(track_id: int, body: Empty, request: Request):
         check_mutation(request)
-        return guarded(lambda: store.ignore_face(face_id, threshold))
+        return guarded(lambda: store.ignore_track(track_id, threshold))
 
     @router.patch("/people/{person_id}")
     def rename_person(person_id: int, body: RenamePerson, request: Request):

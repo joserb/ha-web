@@ -20,6 +20,7 @@ export interface PresenceTrack {
   identity: "auto" | "manual";
   score: number;
   face_id: number | null;
+  has_image: boolean;
   name: string | null;
 }
 
@@ -64,10 +65,10 @@ export async function fetchPresence(signal?: AbortSignal): Promise<PresenceState
   return response.json() as Promise<PresenceState>;
 }
 
-export const labelFace = (faceId: number, target: { person_id: number } | { name: string }) =>
-  send("POST", `/faces/${faceId}/label`, target);
-export const ignoreFace = (faceId: number) => send("POST", `/faces/${faceId}/ignore`, {});
+export const labelTrack = (trackId: number, target: { person_id: number } | { name: string }) =>
+  send("POST", `/tracks/${trackId}/label`, target);
+export const ignoreTrack = (trackId: number) => send("POST", `/tracks/${trackId}/ignore`, {});
 export const renamePerson = (personId: number, name: string) => send("PATCH", `/people/${personId}`, { name });
 export const deletePerson = (personId: number) => send("DELETE", `/people/${personId}`, {});
 
-export const faceImageUrl = (faceId: number) => `/api/presence/faces/${faceId}/image`;
+export const trackImageUrl = (trackId: number) => `/api/presence/tracks/${trackId}/image`;

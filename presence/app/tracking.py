@@ -24,6 +24,32 @@ class Detection:
     box: Box
     score: float
     face: FaceSample | None = None
+    snapshot: bytes = b""  # JPEG de la persona entera en este frame
+
+
+@dataclass(frozen=True)
+class Snapshot:
+    quality: float
+    jpeg: bytes
+
+
+# Umbrales de una trayectoria sin cara para contar como persona: los trozos de
+# menos de un segundo eran casi todos oclusiones o sombras, y llenaban el
+# registro de «salió» dudosos sin imagen.
+MIN_OBSERVATIONS = 3
+MIN_SECONDS = 1.0
+EDGE = 0.01
+
+
+def snapshot_quality(detection: Detection) -> float:
+    """Mayor, más segura, con cara y sin cortar por el borde del encuadre."""
+    x0, y0, x1, y1 = detection.box
+    quality = (x1 - x0) * (y1 - y0) * detection.score
+    if detection.face is not None:
+        quality *= 3
+    if x0 <= EDGE or y0 <= EDGE or x1 >= 1 - EDGE or y1 >= 1 - EDGE:
+        quality *= 0.4
+    return quality
 
 
 @dataclass(frozen=True)
@@ -37,6 +63,7 @@ class Track:
     id: int
     observations: list[Observation] = field(default_factory=list)
     faces: list[FaceSample] = field(default_factory=list)
+    snapshot: Snapshot | None = None
 
     @property
     def first(self) -> Observation:
@@ -46,8 +73,16 @@ class Track:
     def last(self) -> Observation:
         return self.observations[-1]
 
+    @property
+    def duration(self) -> float:
+        return self.last.t - self.first.t
+
     def add(self, t: float, detection: Detection):
         self.observations.append(Observation(t, detection.box))
+        if detection.snapshot:
+            quality = snapshot_quality(detection)
+            if self.snapshot is None or quality > self.snapshot.quality:
+                self.snapshot = Snapshot(quality, detection.snapshot)
         if detection.face is not None:
             self.faces.append(detection.face)
             self.faces.sort(key=lambda face: face.quality, reverse=True)
@@ -106,8 +141,9 @@ class Tracker:
                 track.add(t, detection)
                 self._tracks.append(track)
 
-    def tracks(self, min_observations: int = 2) -> list[Track]:
-        """Trayectorias con evidencia suficiente: un falso positivo aislado de
-        un frame no es una persona, pero una cara reconocible sí lo es."""
+    def tracks(self) -> list[Track]:
+        """Trayectorias con evidencia suficiente: un trozo breve sin cara es
+        ruido, pero una cara detectada basta por sí sola."""
         return [track for track in self._tracks
-                if len(track.observations) >= min_observations or track.faces]
+                if track.faces or (len(track.observations) >= MIN_OBSERVATIONS
+                                   and track.duration >= MIN_SECONDS)]

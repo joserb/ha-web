@@ -18,12 +18,16 @@ PERSON_CLASS = 0
 # frames sueltos y su recorrido se partía en dos trayectorias.
 PERSON_THRESHOLD = 0.35
 FACE_THRESHOLD = 0.7
+# Una cara sin cuerpo detectado alrededor es sospechosa (espejo, cuadros):
+# solo cuenta si YuNet está muy seguro.
+LONE_FACE_THRESHOLD = 0.9
 NANODET_SIZE = 416
 REG_MAX = 7
 HEAD_FRACTION = 0.45
 MIN_HEAD_WIDTH = 160
 MAX_HEAD_WIDTH = 480
 CROP_MAX_SIDE = 160
+SNAPSHOT_MAX_SIDE = 320
 
 
 class Vision:
@@ -139,9 +143,28 @@ class Vision:
             return None
         face = faces[np.argmax(faces[:, -1])].copy()
         face[:14] /= factor
-        face[0:14:2] += hx0
-        face[1:14:2] += hy0
+        # Posición y puntos de referencia se desplazan; ancho y alto (2 y 3) no.
+        face[0] += hx0
+        face[1] += hy0
+        face[4:14:2] += hx0
+        face[5:14:2] += hy0
         return face
+
+    @staticmethod
+    def _snapshot(frame: np.ndarray, box) -> bytes:
+        """La persona entera con algo de contexto: quien sale va de espaldas y
+        su cara no existe, pero su silueta sí permite reconocerle a ojo."""
+        height, width = frame.shape[:2]
+        x0, y0, x1, y1 = box
+        mx, my = 0.15 * (x1 - x0), 0.08 * (y1 - y0)
+        crop = frame[int(max(0, y0 - my)):int(min(height, y1 + my)), int(max(0, x0 - mx)):int(min(width, x1 + mx))]
+        if crop.size == 0:
+            return b""
+        factor = SNAPSHOT_MAX_SIDE / max(crop.shape[:2])
+        if factor < 1:
+            crop = cv2.resize(crop, (round(crop.shape[1] * factor), round(crop.shape[0] * factor)))
+        ok, jpeg = cv2.imencode(".jpg", crop, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        return jpeg.tobytes() if ok else b""
 
     # --- Frame completo -----------------------------------------------------
 
@@ -156,10 +179,12 @@ class Vision:
         for box, score in person_boxes:
             face = self._face_in_head(frame, box)
             sample = self._sample(frame, face) if face is not None else None
-            detections.append(Detection(normalized(box), score, sample))
+            detections.append(Detection(normalized(box), score, sample, self._snapshot(frame, box)))
 
         half = cv2.resize(frame, (width // 2, height // 2))
         for face in self._faces(half):
+            if face[-1] < LONE_FACE_THRESHOLD:
+                continue
             face = face.copy()
             face[:14] *= 2
             cx, cy = face[0] + face[2] / 2, face[1] + face[3] / 2
@@ -168,5 +193,6 @@ class Vision:
             x, y, w, h = face[:4]
             # Sin cuerpo detectado: caja aproximada de la persona desde la cara.
             box = (max(0, x - w), max(0, y - 0.5 * h), min(width, x + 2 * w), min(height, y + 6 * h))
-            detections.append(Detection(normalized(box), float(face[-1]), self._sample(frame, face)))
+            detections.append(Detection(normalized(box), float(face[-1]), self._sample(frame, face),
+                                        self._snapshot(frame, box)))
         return detections

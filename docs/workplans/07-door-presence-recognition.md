@@ -172,6 +172,29 @@ frames en 11 s. De noche, NanoDet veía a una persona de espaldas con confianza
 Pendiente: la entrega 5, con aperturas reales, etiquetado de las primeras
 caras y medición de aciertos de día y de noche.
 
+## Registro legible (2026-09-28, tras el primer día)
+
+Nueve eventos reales dejaron un registro difícil de usar. Solo 8 de 34
+trayectorias tenían imagen, y muchas eran trozos de 0,3–1,1 s marcados como
+«salió» sin nada que ver. Además, los recortes de cara mostraban media
+habitación: al recolocar la cara detectada dentro del recorte de la cabeza
+se sumaba el desplazamiento también al ancho y al alto. Los embeddings no se
+veían afectados, porque salen de los puntos de referencia.
+
+- Corregidas las coordenadas de cara.
+- Cada trayectoria guarda la **persona entera** en su mejor frame (tamaño ×
+  confianza, con prioridad a los que tienen cara y penalizando los cortados por
+  el borde). Máximo 320 px.
+- Una trayectoria sin cara necesita al menos 3 detecciones y 1 s; la migración
+  1 del almacén borra los trozos antiguos que no lo cumplían.
+- Las caras sin cuerpo alrededor exigen confianza ≥ 0,9 (el espejo daba falsos
+  positivos).
+- Etiquetar y descartar son acciones sobre la trayectoria: se puede decir quién
+  salió aunque vaya de espaldas. Solo si hay cara, esa etiqueta alimenta la
+  galería.
+- Borrar a una persona borra también las imágenes de cuerpo que tiene
+  atribuidas.
+
 ## Criterios de aceptación
 
 - Una salida real con la persona etiquetada produce «X ha salido» en el

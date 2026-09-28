@@ -38,6 +38,7 @@ class PersonResult:
     last: Observation
     verdict: Verdict
     face: FaceSample | None
+    snapshot: bytes | None = None
 
 
 def in_zone(box: Box, zone) -> bool:
@@ -86,6 +87,7 @@ def summarize(tracks: list[Track], window: Window, gallery: Gallery, threshold: 
     for key, members in groups.items():
         observations = sorted((obs for track, _ in members for obs in track.observations), key=lambda obs: obs.t)
         faces = [face for track, _ in members for face in track.faces]
+        snapshots = [track.snapshot for track, _ in members if track.snapshot is not None]
         first, last = observations[0], observations[-1]
         results.append(PersonResult(
             person_id=key if isinstance(key, int) else None,
@@ -94,6 +96,7 @@ def summarize(tracks: list[Track], window: Window, gallery: Gallery, threshold: 
             last=last,
             verdict=classify(first, last, window),
             face=max(faces, key=lambda face: face.quality) if faces else None,
+            snapshot=max(snapshots, key=lambda snap: snap.quality).jpeg if snapshots else None,
         ))
     results.sort(key=lambda result: result.first.t)
     return results
