@@ -34,6 +34,14 @@ def healthy():
                                                    for n in report.PI_CONTAINERS]}}}}
 
 
+class ContainerTests(unittest.TestCase):
+    def test_presence_is_watched_like_the_rest_of_the_stack(self):
+        self.assertIn("ha-web-presence-1", report.VPS_CONTAINERS)
+        rows = [{"name": n, "status": "running", "health": "healthy"} for n in report.VPS_CONTAINERS]
+        rows = [r if r["name"] != "ha-web-presence-1" else {**r, "health": "unhealthy"} for r in rows]
+        self.assertEqual(report.check_containers(rows, report.VPS_CONTAINERS), ["ha-web-presence-1"])
+
+
 class SensorTests(unittest.TestCase):
     def test_silence_is_once_per_device_and_missing_inventory_counts(self):
         rows = [row("terraza", m, hours=4) for m in ("temp", "humidity", "pressure", "battery")]

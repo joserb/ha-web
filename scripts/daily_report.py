@@ -25,7 +25,9 @@ EXPECTED = {"bano": "Baño", "estudio": "Estudio", "habitacion": "Habitación",
             "terraza": "Terraza", "entrada": "Entrada", "comedero-gatos": "Comedero"}
 PI_CONTAINERS = {"zro-pi-zro-pi-1", "zro-pi-mosquitto-1", "zro-pi-zigbee2mqtt-1",
                  "ha-web-camera-gateway"}
-VPS_CONTAINERS = {f"ha-web-{s}-1" for s in ("nginx", "backend", "mosquitto", "influxdb")}
+# `presence` existe siempre en el Compose, también con la presencia apagada:
+# una ausencia es un fallo real, no una configuración.
+VPS_CONTAINERS = {f"ha-web-{s}-1" for s in ("nginx", "backend", "mosquitto", "influxdb", "presence")}
 
 
 def number(value):
