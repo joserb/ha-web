@@ -73,6 +73,11 @@ docker compose exec go2rtc sh -c 'netstat -tn 2>/dev/null | grep 192.168.1.199 |
 Repetir con la tarjeta abierta: debe aparecer una conexión al puerto 554, y
 desaparecer unos segundos después de pulsar Stop.
 
+Con la presencia en la puerta activada en el VPS (`CAMERA_PRESENCE_ENABLED=true`),
+el servicio `presence` es un espectador permanente: la conexión al 554 existe
+siempre y el dashboard la comparte. Para repetir esta comprobación, apagar
+antes ese interruptor o usar `PRESENCE_PREROLL_SECONDS=0` (bajo demanda).
+
 ## Medición antes de darlo por bueno
 
 Registrar arranque, bitrate, CPU y memoria en la Pi con un espectador y con

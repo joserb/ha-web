@@ -18,7 +18,7 @@ interface LinkMessage {
   pi_availability: PiAvailability | null;
 }
 
-type SocketMessage = SensorMessage | LinkMessage | ({ type: "notification_rule" } & NotificationState);
+type SocketMessage = SensorMessage | LinkMessage | ({ type: "notification_rule" } & NotificationState) | { type: "presence" };
 
 // Ages are recomputed from the real reading timestamp on this tick, so a dead
 // sensor keeps ageing while the tab is open.
@@ -49,6 +49,8 @@ export function useDashboardData() {
   const [error, setError] = useState<string | null>(null);
   const [chain, setChain] = useState<ConnectionChain>({ ...DISCONNECTED, socket: "connecting" });
   const [now, setNow] = useState(() => Date.now());
+  // Bumped on every presence message; the presence card refetches on change.
+  const [presenceVersion, setPresenceVersion] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -81,6 +83,10 @@ export function useDashboardData() {
         const message = JSON.parse(event.data) as SocketMessage;
         if (message.type === "notification_rule") {
           setNotifications(message);
+          return;
+        }
+        if (message.type === "presence") {
+          setPresenceVersion((value) => value + 1);
           return;
         }
         if (message.type === "link") {
@@ -125,5 +131,5 @@ export function useDashboardData() {
 
   const aged = useMemo(() => sensors.map((sensor) => withAge(sensor, now)), [sensors, now]);
 
-  return { sensors: aged, loading, error, chain, notifications, setNotifications };
+  return { sensors: aged, loading, error, chain, notifications, setNotifications, presenceVersion };
 }

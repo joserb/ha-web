@@ -161,3 +161,15 @@ Sintaxis del remapeo: [documentación de Mosquitto](https://mosquitto.org/man/mo
 - Lado del VPS desplegado el 2026-09-19 con `CAMERA_ENABLED=true` a petición del usuario: handshake 101 por `/camera/home/ws`, fuente fijada en servidor (un cliente sin `src` recibe igualmente `home_camera`) y la pasarela responde con error de conexión a la cámara. El texto de ese error no llega al navegador: incluía IP y puerto internos.
 - **Pendiente**: la cámara está en la red (MAC EZVIZ en `.199`) pero con todos los puertos cerrados —modo privacidad o RTSP desactivado tras reinicio— y la configuración desplegada conserva el marcador de credenciales. Faltan credenciales, reproducción real y medidas de latencia/bitrate/consumo. Mientras tanto la tarjeta muestra error al pulsar View live.
 - Plan y criterios de aceptación: [05-camera-dashboard-widget.md](docs/workplans/05-camera-dashboard-widget.md); evidencia: [04-camera-viewer-feasibility.md](docs/workplans/04-camera-viewer-feasibility.md).
+
+
+## Presencia en la puerta (2026-09-28)
+
+- Servicio `presence/` en el Compose del VPS (FastAPI en 8001, sin puertos publicados; nginx sirve `/api/presence/` con resolución diferida para arrancar aunque no exista). Límite 1 CPU / 768 MB. Plan: [07-door-presence-recognition.md](docs/workplans/07-door-presence-recognition.md).
+- Vídeo: el mismo WebSocket MSE de go2rtc que el navegador, directo a `CAMERA_GATEWAY_HOSTPORT`; nada cambia en la Pi. Paquetes H.264 sin decodificar en RAM (pre-roll `PRESENCE_PREROLL_SECONDS`, 10 s + un GOP de ~4,8 s); PyAV con `probesize` pequeño, porque con el valor por defecto `av.open` espera 5 MB.
+- Puerta: consume `/ZRO/env/#` con las mismas garantías que los avisos (sin retenidos, duplicados ni eventos de más de 2 min). Ventana `[apertura − pre-roll, cierre + post-roll]`.
+- Modelos OpenCV Zoo con hash fijado en el Dockerfile: NanoDet-Plus (personas), YuNet (caras, buscadas a resolución completa en la parte alta de cada persona) y SFace (embeddings, coseno ≥ 0,363). El post-proceso de NanoDet empareja salidas por forma: OpenCV 5 cambia su orden.
+- Dirección: la puerta queda fuera del borde derecho del encuadre (`PRESENCE_DOOR_ZONE=0.8,0,1,1`). Entra quien aparece en esa zona tras abrir y se adentra o sigue tras cerrar; sale quien acaba en ella y ya no está tras cerrar; quien estaba antes y sigue después se quedó. Reglas y confianza en `presence/app/inference.py`.
+- SQLite en el volumen `presence-data`: eventos, trayectorias, caras (JPEG ≤160 px + embedding) y personas. El estado de cada persona se deriva de su último evento, así que corregir una etiqueta lo corrige. Purga a `PRESENCE_RETENTION_DAYS`, salvo las muestras etiquetadas.
+- Publica `haweb/presence/event` y `haweb/presence/changed` sin retener. El backend los intercepta antes del camino genérico (no van a InfluxDB), los reenvía por WebSocket como `presence` y encola el texto en Telegram con `NotificationStore.enqueue_message`, bajo la regla de la puerta. `deliveries.message` es una columna nueva, migrada al arrancar.
+- Interruptor `CAMERA_PRESENCE_ENABLED` (servicio y tarjeta, vía `/camera/config.json`).

@@ -36,6 +36,9 @@ class NotificationStore:
                 detail TEXT, UNIQUE(sensor_id, timestamp)
             );
         """)
+        # Presence messages (presence/ service) carry their own text; door openings do not.
+        if "message" not in {row[1] for row in self.db.execute("PRAGMA table_info(deliveries)")}:
+            self.db.execute("ALTER TABLE deliveries ADD COLUMN message TEXT")
         # A process may have died after Telegram accepted a request. Never replay it.
         with self.db:
             self.db.execute("UPDATE deliveries SET status='delivery_unknown', detail='Delivery interrupted; not retried' WHERE status='sending'")
@@ -111,6 +114,16 @@ class NotificationStore:
                     and now - timestamp <= MAX_EVENT_AGE):
                 self.db.execute("INSERT OR IGNORE INTO deliveries (sensor_id, timestamp, label, version, status, next_attempt) VALUES (?, ?, ?, ?, 'pending', ?)",
                                 (sensor_id, timestamp, label, rule["version"], now))
+
+    def enqueue_message(self, sensor_id: str, label: str, message: str, timestamp: float, now: float) -> bool:
+        """Queue a presence result under the door's rule: same session, freshness and expiry checks."""
+        rule = self.rule(sensor_id, now)
+        if not (rule["active"] and rule["enabled_from"] < timestamp <= now + 5 and now - timestamp <= MAX_EVENT_AGE):
+            return False
+        with self.db:
+            return self.db.execute(
+                "INSERT OR IGNORE INTO deliveries (sensor_id, timestamp, label, version, status, next_attempt, message) VALUES (?, ?, ?, ?, 'pending', ?, ?)",
+                (sensor_id, timestamp, label, rule["version"], now, message)).rowcount == 1
 
     def claim(self, now: float) -> dict | None:
         with self.db:

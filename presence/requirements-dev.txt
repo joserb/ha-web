@@ -1,0 +1,5 @@
+# La lógica pura (puerta, seguimiento, identidad, clasificación, almacén y API)
+# se prueba sin OpenCV ni PyAV.
+fastapi==0.115.0
+pydantic==2.13.4
+httpx==0.28.1

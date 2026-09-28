@@ -151,6 +151,30 @@ class StoreTests(unittest.TestCase):
         self.store.finish(delivery, "failed", "rate limit", 1005, 10)
         self.assertIsNone(self.store.claim(1015))
 
+    def test_presence_message_rides_on_the_door_rule(self):
+        self.assertFalse(self.store.enqueue_message("entrada_door", "Entrance", "🏠 Ana ha entrado", 1001, 1001))
+        self.opening()
+        self.assertTrue(self.store.enqueue_message("entrada_door", "Entrance", "🏠 Ana ha entrado", 1020, 1020))
+        self.assertFalse(self.store.enqueue_message("entrada_door", "Entrance", "🏠 Ana ha entrado", 1020, 1021))
+        self.assertEqual(self.queued(), 2)
+        self.assertIsNone(self.store.claim(1003)["message"])
+        self.assertEqual(self.store.claim(1021)["message"], "🏠 Ana ha entrado")
+        # Old analysis, or after the rule is switched off: nothing is queued.
+        self.assertFalse(self.store.enqueue_message("entrada_door", "Entrance", "late", 1030, 1030 + 121))
+        self.store.disable("entrada_door", 1, 1040)
+        self.assertFalse(self.store.enqueue_message("entrada_door", "Entrance", "off", 1041, 1041))
+
+    def test_existing_database_gains_the_message_column(self):
+        self.store.close()
+        import sqlite3
+        db = sqlite3.connect(self.path)
+        db.execute("ALTER TABLE deliveries DROP COLUMN message")
+        db.commit()
+        db.close()
+        self.store = NotificationStore(self.path)
+        self.opening()
+        self.assertTrue(self.store.enqueue_message("entrada_door", "Entrance", "🏠", 1020, 1020))
+
 
 class ApiTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
@@ -216,6 +240,14 @@ class SenderTests(unittest.TestCase):
         payload = json.loads(urlopen.call_args.args[0].data)
         self.assertIn("puerta abierta", payload["text"])
         self.assertEqual(urlopen.call_args.kwargs["timeout"], 8)
+
+    @patch("urllib.request.urlopen")
+    def test_presence_text_replaces_the_door_text(self, urlopen):
+        urlopen.return_value.__enter__.return_value = io.BytesIO(b'{"ok":true}')
+        self.sender._send({**self.delivery, "message": "🏠 Ana ha salido"})
+        text = json.loads(urlopen.call_args.args[0].data)["text"]
+        self.assertTrue(text.startswith("🏠 Ana ha salido · "))
+        self.assertNotIn("puerta abierta", text)
 
     @patch("urllib.request.urlopen")
     def test_429_permanent_and_ambiguous_failures(self, urlopen):

@@ -181,6 +181,29 @@ async def handle_zro_env_message(topic: str, payload: str, retained: bool = Fals
     return True
 
 
+PRESENCE_PREFIX = "haweb/presence/"
+
+
+async def handle_presence_message(topic: str, payload: str):
+    """Resultados del servicio `presence`: ni sensores ni InfluxDB.
+
+    Se avisa a los navegadores para que pidan el estado a su API y, si la regla
+    de avisos de esa puerta está activa, el texto entra en la misma cola de
+    Telegram que las aperturas, con las mismas comprobaciones.
+    """
+    if topic == PRESENCE_PREFIX + "event":
+        try:
+            event = json.loads(payload)
+            sensor_id, text, when = str(event["sensor_id"]), str(event["text"])[:300], float(event["time"])
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+            logger.warning("Invalid presence event payload")
+            return
+        device = sensor_id.removesuffix("_door").replace("_", "-")
+        label = LOCATION_LABELS.get(device, device.replace("-", " ").title())
+        notifications.store.enqueue_message(sensor_id, label, text, when, datetime.now(timezone.utc).timestamp())
+    await broadcast({"type": "presence"})
+
+
 async def mqtt_listener():
     """Se suscribe a MQTT y reenvía a WebSocket + InfluxDB."""
     global mqtt_connected
@@ -206,6 +229,9 @@ async def mqtt_listener():
                             if not link_state.bridge_connected or link_state.pi_availability != "online":
                                 notifications.store.reset_baselines()
                             await broadcast(link_message())
+                        continue
+                    if topic.startswith(PRESENCE_PREFIX):
+                        await handle_presence_message(topic, payload)
                         continue
                     if await handle_zro_env_message(topic, payload, bool(message.retain)):
                         continue

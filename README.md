@@ -105,3 +105,15 @@ Despliegue en dos partes:
 Con `CAMERA_ENABLED=false` (valor por defecto de la plantilla) la tarjeta no se monta y la ruta de vídeo no lleva a ningún sitio. La cámara funciona aunque falle la API de sensores, y los sensores y avisos siguen funcionando aunque falle la cámara.
 
 **Estado (2026-09-20):** pasarela desplegada en la Pi y tarjeta activada en el VPS a petición del usuario. Toda la cadena está verificada hasta la cámara, que en ese momento estaba apagada (en la red, con todos los puertos cerrados) y cuya URL RTSP autenticada aún no se ha escrito en `~/camera-gateway/go2rtc.yaml`. Mientras tanto, **View live** termina en «The gateway could not reach the camera». Quedan reproducción real, latencia, bitrate y consumo en la Pi. Detalle y criterios: [plan del widget](docs/workplans/05-camera-dashboard-widget.md).
+
+## Quién entra y quién sale
+
+La tarjeta **Presence**, sobre la de cámara, muestra quién está en casa y los últimos eventos de la puerta de entrada: quién entró, quién salió y con qué confianza. Lo produce el servicio `presence` del Compose al combinar el sensor de la puerta con la cámara: cada apertura dispara un análisis que empieza unos segundos **antes** (quien sale cruza el salón hacia la derecha antes de abrir) y termina unos segundos después del cierre. Para detectar personas, caras e identidades usa NanoDet, YuNet y SFace, en el propio VPS.
+
+Para enseñarle a alguien, pulsa **Label** junto a su cara en un evento y elige o escribe su nombre. Esa muestra sirve para reconocerle después, y cuantas más muestras (de día, de noche, de frente o de lado), mejor. **Dismiss** descarta una detección. **Manage people** permite renombrar o borrar a una persona, y borrarla elimina también sus muestras. Las caras sin etiquetar se purgan a los 30 días.
+
+Con la regla **Telegram alerts** de la puerta activa, al aviso de apertura le sigue otro con el resultado, por ejemplo `🏠 Ana ha salido · 28/09/2026 19:42:08`. El aviso es solo texto: las caras no salen del VPS.
+
+Activación en el `.env` del VPS: `CAMERA_PRESENCE_ENABLED=true` (requiere `CAMERA_GATEWAY_HOSTPORT`) y `docker compose up -d --build presence nginx backend`. Con el interruptor activo, `presence` mantiene una conexión permanente con go2rtc y guarda en memoria unos segundos de vídeo sin decodificar. La cámara ya no se libera al cerrar el visor, pero el directo del dashboard comparte ese mismo RTSP. Si `presence` cae, sensores, avisos y directo siguen funcionando. Parámetros en `.env.example`; diseño, límites y criterios en el [plan 07](docs/workplans/07-door-presence-recognition.md).
+
+Pruebas, con el mismo `.venv` del backend (sus dependencias cubren `presence/requirements-dev.txt`): `(cd presence && ../.venv/bin/python -m unittest discover -s tests)`.

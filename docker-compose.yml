@@ -85,6 +85,37 @@ services:
         max-size: 10m
         max-file: "3"
 
+  presence:
+    # Quién entra y quién sale por la puerta de entrada (docs/workplans/07).
+    # Aparte del backend a propósito: OpenCV y PyAV no entran en su imagen, y
+    # un pico de CPU o un OOM del análisis no puede tirar sensores ni avisos.
+    # Con CAMERA_PRESENCE_ENABLED=false arranca, pero no abre la cámara.
+    build: ./presence
+    env_file: .env
+    volumes:
+      # Eventos, caras recortadas y embeddings: datos biométricos, solo aquí.
+      - presence-data:/data
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    # Solo lo alcanza nginx por la red interna: no publica puertos.
+    cpus: 1.0
+    mem_limit: 768m
+    restart: unless-stopped
+    healthcheck:
+      # Hilos de análisis y de vídeo vivos. Una cámara en modo privacidad no
+      # cuenta: reiniciar el contenedor no la arregla.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/api/presence/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
   nginx:
     build: ./frontend-react
     environment:
@@ -98,6 +129,8 @@ services:
       # sitio mientras la pasarela de la Raspberry no esté verificada.
       CAMERA_ENABLED: "${CAMERA_ENABLED:-false}"
       CAMERA_GATEWAY_HOSTPORT: "${CAMERA_GATEWAY_HOSTPORT:-127.0.0.1:1}"
+      # Muestra la tarjeta de presencia; el servicio lee la misma variable.
+      CAMERA_PRESENCE_ENABLED: "${CAMERA_PRESENCE_ENABLED:-false}"
     depends_on:
       backend:
         condition: service_healthy
@@ -123,3 +156,4 @@ volumes:
   mosquitto-log:
   influxdb-data:
   notification-data:
+  presence-data:

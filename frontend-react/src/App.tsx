@@ -4,6 +4,7 @@ import { TemperatureMeterCard } from "@/components/temperature-meter-card";
 import { TrendCard } from "@/components/trend-card";
 import { EventTimelineCard } from "@/components/event-timeline-card";
 import { CameraCard } from "@/components/camera-card";
+import { PresenceCard } from "@/components/presence-card";
 import { useDashboardData } from "@/hooks/use-dashboard-data";
 import { useTheme } from "@/hooks/use-theme";
 import type { TimeRange } from "@/lib/ranges";
@@ -17,7 +18,7 @@ function initialRange(): TimeRange {
 export default function App() {
   const [range, setRangeState] = useState<TimeRange>(initialRange);
   const { theme, setTheme } = useTheme();
-  const { sensors, loading, error, chain, notifications, setNotifications } = useDashboardData();
+  const { sensors, loading, error, chain, notifications, setNotifications, presenceVersion } = useDashboardData();
 
   function setRange(value: TimeRange) {
     localStorage.setItem("ha-web.time-range", value);
@@ -58,6 +59,7 @@ export default function App() {
       </>}
       {/* Outside the sensor gate on purpose: a camera is still useful when the
           sensor API is down, and its own failures stay inside the card. */}
+      <PresenceCard version={presenceVersion} />
       <CameraCard />
     </main>
   );

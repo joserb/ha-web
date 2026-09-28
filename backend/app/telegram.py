@@ -32,7 +32,8 @@ class TelegramSender:
         if not self.configured:
             return SendResult("failed", "Telegram is not configured")
         when = datetime.fromtimestamp(delivery["timestamp"], self.timezone)
-        message = f"🚪 {delivery['label']}: puerta abierta · {when:%d/%m/%Y %H:%M:%S} ({self.timezone.key})"
+        text = delivery.get("message") or f"🚪 {delivery['label']}: puerta abierta"
+        message = f"{text} · {when:%d/%m/%Y %H:%M:%S} ({self.timezone.key})"
         request = urllib.request.Request(
             f"https://api.telegram.org/bot{self.token}/sendMessage",
             data=json.dumps({"chat_id": self.chat_id, "text": message}).encode(),

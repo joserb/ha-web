@@ -22,6 +22,18 @@ server {
         proxy_set_header Host $http_host;
     }
 
+    # Presencia en la puerta: servicio aparte. La resolución diferida (variable
+    # + resolver de Docker) es lo que permite arrancar nginx aunque `presence`
+    # no exista o esté caído: con un nombre fijo en proxy_pass, nginx resuelve
+    # al cargar y no arrancaría, y con él todo el dashboard.
+    location /api/presence/ {
+        resolver 127.0.0.11 valid=30s ipv6=off;
+        set $presence_upstream http://presence:8001;
+        proxy_pass $presence_upstream;
+        proxy_set_header Host $http_host;
+        client_max_body_size 4k;
+    }
+
     location /ws {
         proxy_pass http://backend:8000/ws;
         proxy_http_version 1.1;
@@ -36,7 +48,7 @@ server {
     location = /camera/config.json {
         default_type application/json;
         add_header Cache-Control "no-store" always;
-        return 200 '{"enabled": ${CAMERA_ENABLED}}';
+        return 200 '{"enabled": ${CAMERA_ENABLED}, "presence": ${CAMERA_PRESENCE_ENABLED}}';
     }
 
     # Reproducción de la cámara: WebSocket hacia go2rtc en la Raspberry.
