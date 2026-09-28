@@ -111,7 +111,7 @@ Despliegue en dos partes:
 
 Con `CAMERA_ENABLED=false` (valor por defecto de la plantilla) la tarjeta no se monta y la ruta de vídeo no lleva a ningún sitio. La cámara funciona aunque falle la API de sensores, y los sensores y avisos siguen funcionando aunque falle la cámara.
 
-**Estado (2026-09-20):** pasarela desplegada en la Pi y tarjeta activada en el VPS a petición del usuario. Toda la cadena está verificada hasta la cámara, que en ese momento estaba apagada (en la red, con todos los puertos cerrados) y cuya URL RTSP autenticada aún no se ha escrito en `~/camera-gateway/go2rtc.yaml`. Mientras tanto, **View live** termina en «The gateway could not reach the camera». Quedan reproducción real, latencia, bitrate y consumo en la Pi. Detalle y criterios: [plan del widget](docs/workplans/05-camera-dashboard-widget.md).
+**Estado (2026-09-27):** credenciales RTSP configuradas en la Pi y pasarela `healthy`. Verificado vídeo fMP4 H.264/AAC a través del WebSocket del VPS: 1,39 MB recibidos en 12 segundos, con primer mensaje binario a los 0,378 s. La conexión RTSP se libera al cerrar el espectador y las rutas administrativas siguen devolviendo 404. Falta confirmar reproducción visual en los navegadores del usuario, latencia de imagen y consumo bajo carga. Detalle y criterios: [plan del widget](docs/workplans/05-camera-dashboard-widget.md).
 
 ## Quién entra y quién sale
 

@@ -1,7 +1,7 @@
 ---
 status: in-progress
 created: 2026-09-18
-updated: 2026-09-19
+updated: 2026-09-27
 ---
 
 # Widget de acceso a la cámara en el dashboard
@@ -178,7 +178,7 @@ Verificado en local: `npm run typecheck` y `npm run build` correctos; la plantil
 La tarjeta ya está activada en producción por decisión del usuario, con la cámara apagada; hasta cerrar esta lista, View live termina en error.
 
 - [x] Desplegar `camera-gateway/` en la Pi y comprobar `docker compose ps` y logs. Falta ver la apertura/cierre del RTSP bajo demanda con la cámara encendida.
-- [ ] Escribir la URL RTSP autenticada en `~/camera-gateway/go2rtc.yaml` de la Pi y reiniciar la pasarela.
+- [x] Escribir la URL RTSP autenticada en `~/camera-gateway/go2rtc.yaml` de la Pi y reiniciar la pasarela (2026-09-27).
 - [ ] Reproducción real desde escritorio y móvil por Tailscale; medir arranque, bitrate, CPU y memoria. `nginx -t` ya es correcto.
 - [x] `/api/streams`, `/api/config` y la interfaz web responden 404 desde la Pi y desde el VPS; un cliente sin `src` recibe igualmente la fuente configurada.
 - [ ] Pruebas automatizadas del ciclo de vida del reproductor con transporte simulado: el frontend todavía no tiene runner de pruebas, así que añadirlo es una decisión pendiente.
@@ -220,3 +220,31 @@ Verificado en el VPS:
 Esa respuesta destapó una fuga: el widget mostraba el texto del error tal cual, con la IP y el puerto internos de la cámara. El plan ya lo prohibía. Ahora el reproductor descarta el texto de la pasarela y muestra un mensaje genérico; el detalle queda en el log de go2rtc.
 
 Sigue pendiente: credenciales RTSP reales en `~/camera-gateway/go2rtc.yaml` de la Pi, despertar la cámara y reactivar RTSP, y después reproducción real, medidas y pruebas en navegadores.
+
+## Comprobación de conectividad (2026-09-26)
+
+La cámara vuelve a estar accesible desde la Pi en `192.168.1.199`: TCP 554 (RTSP) y 8000 abiertos. No hace falta repetir el diagnóstico de cámara apagada para este estado.
+
+- `ha-web-camera-gateway`: `running`, `healthy`.
+- Desde la Pi, `/api/ws` responde 400 y `/`, `/api/config` y `/api/streams` responden 404.
+- Desde el VPS, `/camera/config.json` devuelve `{"enabled": true}`; acceso a la pasarela por Tailscale correcto y `/api/streams` devuelve 404.
+- Handshake de `/camera/home/ws`: **101 Switching Protocols**. Una solicitud MSE a través de Nginx recibe **`mse: streams: wrong user/pass`**. El bloqueo actual es la autenticación; no un timeout de conectividad.
+- La configuración local de go2rtc sigue conteniendo los marcadores `USUARIO:CONTRASENA`; el `.env` de la pasarela solo contiene la IP de enlace. No se encontraron credenciales reales en esos archivos de configuración.
+
+Para aportar las credenciales sin publicarlas en el chat ni en Git, abrir una sesión SSH a la Pi y ejecutar `sudoedit /home/joserb/camera-gateway/go2rtc.yaml`. Sustituir los marcadores por las credenciales RTSP previamente verificadas, conservando el resto de la configuración y el propietario `root:root` con modo 600. Después, desde `/home/joserb/camera-gateway`, ejecutar `docker compose restart go2rtc` y verificar **View live** en el dashboard.
+
+En esta comprobación no se cambió configuración ni se reiniciaron servicios. No se grabaron imágenes. La reproducción real, las medidas de rendimiento y la compatibilidad de navegadores siguen pendientes de configurar la autenticación.
+
+## Autenticación restaurada y transporte de vídeo verificado (2026-09-27)
+
+Con autorización explícita del usuario, sustituidos los marcadores por las credenciales RTSP reales en el fichero local de la Pi; se conserva propietario `root:root` y modo `600`. Reiniciado únicamente `go2rtc` en el proyecto `camera-gateway`.
+
+Validación desde `charo-vps`, utilizando `/camera/home/ws` de Nginx:
+
+- Handshake **101 Switching Protocols** y negociación MSE correcta: `video/mp4; codecs="avc1.4D0029,mp4a.40.2"` (H.264/AAC).
+- Recibidos **323 mensajes binarios**, **1.386.697 bytes** durante **12,01 s**, con cajas MP4 `ftyp`, `moov`, `moof` y `mdat`. Primer mensaje binario a los **0,378 s** desde el inicio de la petición. Es tiempo hasta recibir datos, no latencia visual ni tiempo de reproducción en un navegador.
+- Tráfico de payload aproximado durante esa muestra: **0,92 Mbit/s**; no incluye sobrecarga de red.
+- Tras cerrar la prueba, **ninguna conexión RTSP establecida** hacia la cámara dentro del contenedor.
+- Pasarela `running` y `healthy`; `/`, `/api/config` y `/api/streams` siguen devolviendo **404** por Tailscale.
+
+Los datos de vídeo se procesaron en memoria para contar mensajes y verificar el formato; no se guardaron ni mostraron imágenes. Quedan pendientes reproducción visual desde escritorio y móvil, latencia de imagen, medidas de CPU/memoria bajo carga y dos espectadores. La lectura de memoria de `docker stats` devolvió `0B / 0B`, por lo que no sirve como medida de consumo.
