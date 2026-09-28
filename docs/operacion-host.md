@@ -87,3 +87,86 @@ Antes de cada despliegue conviene guardar los fuentes y etiquetar la imagen ante
 Cambiar `.env` recrea todos los servicios que lo cargan, no solo el que se quería tocar: en la práctica, backend e InfluxDB también. Los datos viven en volúmenes y sobreviven, pero cuenta con un minuto de arranque del backend.
 
 Reiniciar el backend es seguro para el estado actual de los sensores: recupera las últimas lecturas desde InfluxDB y los retenidos que el broker reproduce al reconectar no las sobrescriben si son más antiguos. Antes del 2026-09-20 sí lo hacían, y cada reinicio dejaba todos los sensores marcados como obsoletos hasta que volvían a reportar.
+
+## Resumen diario de Telegram (2026-09-27)
+
+Instalado en `charo-vps`, como `joserb`, sin cambiar el backend. `scripts/daily-report.sh`
+carga las credenciales Telegram del `.env` existente y ejecuta `scripts/daily_report.py`.
+La entrada de cron llama cada minuto, pero Python decide cuándo enviar con
+`Europe/Madrid`: **18:00**, tanto en verano como en invierno. El VPS usa UTC.
+Si el host estaba apagado a esa hora, envía al volver durante ese mismo día;
+no reconstruye los días perdidos.
+
+```cron
+* * * * * /opt/projects/ha-web/scripts/daily-report.sh --scheduled >> /opt/projects/ha-web/.health/daily-report.log 2>&1
+```
+
+Incluye siempre un resultado, incluso cuando todo lo comprobado está bien:
+
+- API, InfluxDB, MQTT, puente, disponibilidad de Pi y worker de avisos.
+- Contenedores de ha-web en el VPS; zro-pi, Mosquitto, Zigbee2MQTT y pasarela de cámara en la Pi.
+- Supervisión reciente de la Pi, escritura/espacio libre, errores de E/S y temperatura ≥80 °C;
+  disco del VPS con aviso por debajo del 10 % libre.
+- Cámara: abre el WebSocket de Nginx, exige tres fragmentos de vídeo fMP4 y cierra la conexión.
+  No guarda imágenes; comprueba recepción, no renderizado en un navegador.
+- Los seis sensores esperados, agrupados por dispositivo. Usa las marcas temporales reales
+  y los límites del catálogo: 1 h para climáticos y 24 h para puerta/vibración por defecto.
+  Incluye sensores ausentes del catálogo como «sin datos».
+- Batería **≤30 %** (`DAILY_REPORT_BATTERY_PERCENT`); distingue porcentajes desconocidos y
+  lecturas antiguas. La fecha corresponde al mensaje del dispositivo: puede contener
+  valores de batería conservados por Zigbee2MQTT de mensajes anteriores.
+- Último archivo cifrado de Raspberry realmente recibido en el VPS, comprobando nombre,
+  cabecera y tamaño mínimo. Avisa si falta, es inválido o tiene más de 30 h. Esto no es
+  una prueba de descifrado/restauración. El informe expone las copias todavía pendientes.
+
+Los endpoints o comprobaciones que fallan se muestran como fallo/sin datos, no como sanos.
+El destino de la Pi puede cambiarse con `DAILY_REPORT_PI_URL` y el directorio de copias
+con `DAILY_REPORT_BACKUP_DIR`; los valores por defecto corresponden a la instalación doméstica.
+
+El candado `.health/daily-report.lock` evita ejecuciones simultáneas. El registro atómico
+`.health/daily-report.json` guarda la fecha local y el resultado (`sent`, `rejected`,
+`delivery_unknown`, etc.). Se registra el intento **antes** de enviar: una respuesta
+ambigua o un proceso interrumpido no provoca mensajes duplicados. No hay reintento
+automático ese día si Telegram rechaza el envío o no puede confirmarlo; revisar el log.
+Un registro corrupto bloquea el envío y deja un error, para evitar duplicados.
+
+```bash
+cd /opt/projects/ha-web
+scripts/daily-report.sh --preview     # comprueba sistemas; no envía Telegram
+scripts/daily-report.sh --send-test   # envía una prueba; no consume el resumen de las 18:00
+cat .health/daily-report.json         # existe tras el primer intento programado
+python3 -m unittest discover -s scripts/tests -v
+```
+
+Telegram confirmó la entrega de la prueba el 2026-09-27. En la Raspberry se cambió
+**solo** `alerts.zigbee_silence.enabled` a `false` en
+`/home/joserb/zro-pi/config/pihomeblk.yaml`, y se reinició únicamente `zro-pi`.
+Así se absorben los avisos individuales de silencio/recuperación en el resumen diario.
+Los vigilantes de servicios, avisos de almacenamiento y controles temporales de puerta
+conservan su funcionamiento. Al desplegar de nuevo el otro repositorio `zro-pi`, conservar
+este ajuste doméstico: su configuración fuente anterior lo tenía a `true`.
+
+Rollback: eliminar únicamente la línea de cron de `daily-report.sh`, restaurar
+`zigbee_silence.enabled: true` en la Pi y reiniciar `zro-pi`. Se guardaron copias del
+crontab anterior en `.health/crontab-before-daily-report-*` del VPS y del YAML en
+`/home/joserb/zro-pi/.health/pihomeblk-before-daily-report-*.yaml` de la Pi.
+
+## Auditoría de copias periódicas (2026-09-27)
+
+La copia de la Raspberry **sí está implementada**: el cron de `joserb` en el VPS ejecuta
+`/home/joserb/zro-pi-backup/pull-backups.sh` a las **04:17 UTC** cada día (06:17 en verano,
+05:17 en invierno en Madrid). Se verificó el archivo del 27 de septiembre y el log sin
+fallos. El destino es `/home/joserb/backups/zro-pi/pihomeblk/`, con cifrado age y retención
+por defecto de 7 copias recientes, 4 semanas y 6 meses.
+
+Incluye `.env` de zro-pi, contraseña de Mosquitto, directorio de datos Zigbee2MQTT
+(incluido `coordinator_backup.json` y su base de dispositivos), datos persistidos de
+Mosquitto y un manifiesto. La clave SSH de backup solo permite generar el snapshot.
+
+**Cobertura parcial**: no se encontró programación para respaldar los volúmenes de
+InfluxDB y notificaciones de ha-web, sus secretos/configuración ni el directorio
+`camera-gateway` de la Pi. Las copias `ha-web-backups/telegram-20260918` y
+`camera-20260919` son anteriores a despliegues, no una copia diaria completa.
+La Raspberry tiene copia fuera de la Pi, pero no se verificó una segunda copia fuera
+del VPS ni una restauración con la clave privada. El resumen diario no presenta esas
+partes como protegidas.

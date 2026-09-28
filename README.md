@@ -62,6 +62,13 @@ Sintaxis del remapeo: [documentación de Mosquitto](https://mosquitto.org/man/mo
 
 ## Avisos temporales por Telegram
 
+Desde el 2026-09-27 hay también un **resumen diario a las 18:00 (Europe/Madrid)**:
+servicios, cámara, sensores sin datos recientes, baterías ≤30 % y estado de la copia
+de Raspberry. Sustituye los avisos individuales de silencio Zigbee. La copia diaria
+cifrada Pi → VPS funciona; siguen pendientes los backups periódicos de ha-web
+(histórico, avisos y configuración) y de la configuración de cámara.
+Detalles y comprobaciones en [operación del host](docs/operacion-host.md).
+
 En la tarjeta **Entrance Door**, selecciona `1h`, `4h`, `8h`, `1d` o `7d` y activa **Telegram alerts**. La hora de fin se confirma desde el servidor. **Extend** amplía hasta al menos la duración elegida desde ahora; apagar el interruptor cancela los avisos pendientes. Funciona con el navegador cerrado y conserva la caducidad tras reinicios.
 
 Solo se avisa de nuevas transiciones de puerta cerrada a abierta. Activar cuando ya está abierta no envía un aviso inmediato. Los eventos retenidos, antiguos o repetidos no disparan avisos. Tras una desconexión puede perderse una apertura: no se reconstruyen avisos históricos. Un envío ya iniciado puede completarse aunque se apague el interruptor.
