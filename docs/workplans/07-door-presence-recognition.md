@@ -146,6 +146,10 @@ corregir una etiqueta corrige también el estado.
 - A 4–6 m una cara ocupa pocas decenas de píxeles y de noche la imagen es IR en
   gris: la identificación será menos fiable que la dirección. Por eso cada
   resultado lleva confianza y la persona desconocida es un resultado válido.
+- La campana extractora tapa la cabeza de quien pasa por el centro de la
+  escena (comprobado de noche el 2026-09-28): ahí solo hay cuerpo, sin cara.
+  Las caras útiles salen del lado derecho, al entrar, y de quien camina hacia
+  la cocina.
 - La cámara no ve la puerta: dos personas que salen juntas y otra que entra a la
   vez pueden confundirse. No se intenta resolver en esta entrega.
 - Con la cámara en modo privacidad o apagada, el evento se registra como «sin
@@ -154,6 +158,19 @@ corregir una etiqueta corrige también el estado.
   el RTSP con un espectador»): ahora hay siempre un espectador interno. La
   cámara admite un único RTSP compartido por go2rtc, así que el directo del
   dashboard no abre otro.
+
+## Estado (2026-09-28)
+
+Entregas 1–4 desplegadas en el VPS con `CAMERA_PRESENCE_ENABLED=true`
+(commits `164ed59` y `0effca2`). Verificado en producción: `presence` sano,
+conectado a la pasarela con ~20 s de vídeo en memoria, 1,3 % de CPU y 180 MB
+en reposo. El resto del stack sigue sano. Un análisis completo sobre el directo, en proceso
+aparte y con apertura simulada (sin tocar MQTT ni el histórico), procesó 60
+frames en 11 s. De noche, NanoDet veía a una persona de espaldas con confianza
+0,47–0,54 y la partía en dos trayectorias; el umbral bajó de 0,4 a 0,35.
+
+Pendiente: la entrega 5, con aperturas reales, etiquetado de las primeras
+caras y medición de aciertos de día y de noche.
 
 ## Criterios de aceptación
 
